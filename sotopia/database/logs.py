@@ -1,5 +1,5 @@
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -27,15 +27,24 @@ class BaseNonStreamingSimulationStatus(BaseModel):
 if TYPE_CHECKING:
     # For type checking, always assume Redis backend to get proper method signatures
     class NonStreamingSimulationStatus(BaseNonStreamingSimulationStatus, JsonModel):
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 elif is_local_backend():
 
     class NonStreamingSimulationStatus(BaseNonStreamingSimulationStatus):
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 else:
 
     class NonStreamingSimulationStatus(BaseNonStreamingSimulationStatus, JsonModel):  # type: ignore[no-redef]
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 
 
 class BaseEpisodeLog(BaseModel):
@@ -109,15 +118,24 @@ class BaseEpisodeLog(BaseModel):
 if TYPE_CHECKING:
     # For type checking, always assume Redis backend to get proper method signatures
     class EpisodeLog(BaseEpisodeLog, JsonModel):
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 elif is_local_backend():
 
     class EpisodeLog(BaseEpisodeLog):
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 else:
 
     class EpisodeLog(BaseEpisodeLog, JsonModel):  # type: ignore[no-redef]
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 
 
 class BaseAnnotationForEpisode(BaseModel):
@@ -131,15 +149,24 @@ class BaseAnnotationForEpisode(BaseModel):
 if TYPE_CHECKING:
     # For type checking, always assume Redis backend to get proper method signatures
     class AnnotationForEpisode(BaseAnnotationForEpisode, JsonModel):
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 elif is_local_backend():
 
     class AnnotationForEpisode(BaseAnnotationForEpisode):
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 else:
 
     class AnnotationForEpisode(BaseAnnotationForEpisode, JsonModel):  # type: ignore[no-redef]
-        pass
+        def __init__(self, **kwargs: Any):
+            if "pk" not in kwargs:
+                kwargs["pk"] = ""
+            super().__init__(**kwargs)
 
 
 # Patch model classes for local storage support

@@ -129,6 +129,7 @@ class ListOfIntOutputParser(OutputParser[list[int]]):
         self.range_of_int = range_of_int
 
     def _get_description_text(self) -> str:
+        # 中文注释：该描述会直接拼进提示词，强约束模型输出“仅空格分隔整数”。
         return f"a list of{' ' + str(self.number_of_int) if self.number_of_int else ''} intergers{' within the range of' + str(self.range_of_int) if self.range_of_int else ''} separated by spaces. Don't output anything else. Format example: 1 2 3 4 5"
 
     def get_format_instructions(self) -> str:
@@ -136,12 +137,14 @@ class ListOfIntOutputParser(OutputParser[list[int]]):
 
     def parse(self, output: str) -> list[int]:
         try:
+            # 中文注释：这里采用最严格解析：按空格切分并逐个 int 转换。
             output_loaded = output.split(" ")
             result = [int(x) for x in output_loaded]
             if self.number_of_int and len(result) != self.number_of_int:
                 msg = f"Expect {self.number_of_int} integers, got {len(result)}"
                 raise ValueError(msg)
             if self.range_of_int:
+                # 中文注释：可选范围校验，避免模型给出超界值。
                 for x in result:
                     if x < self.range_of_int[0] or x > self.range_of_int[1]:
                         msg = f"Expect integers within the range of {self.range_of_int}, got {result}"

@@ -177,6 +177,8 @@ class ParallelSotopiaEnv(ParallelEnv[str, Observation, AgentAction], MessengerMi
             model_name (str, optional): The name of the language model to use. Defaults to "gpt-3.5-turbo".
         """
         super().__init__()
+        # 中文注释：background_class 允许上层环境替换背景数据结构，
+        # 默认使用标准 ScriptBackground。
         if background_class is None:
             self.background_class = ScriptBackground
         else:
@@ -192,6 +194,8 @@ class ParallelSotopiaEnv(ParallelEnv[str, Observation, AgentAction], MessengerMi
 
         self.agents = []
         self.action_spaces = {}
+        # 中文注释：available_action_types 会直接传给 Observation，
+        # 进而约束 agent 可选 action_type。
         self.available_action_types = list(available_action_types)
         self.action_order = action_order
         self.action_mask: list[bool] = []
@@ -234,6 +238,8 @@ class ParallelSotopiaEnv(ParallelEnv[str, Observation, AgentAction], MessengerMi
         """
         super().__init__()
         MessengerMixin.reset_inbox(self)
+        # 中文注释：reset 会重建 episode 的可见背景、观察空间和动作空间，
+        # 并清空消息历史（inbox）。
         assert (
             not options
             or "partial_background_file" not in options

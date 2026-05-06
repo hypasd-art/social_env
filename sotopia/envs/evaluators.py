@@ -186,6 +186,8 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
         temperature: float | None = 0.0,
         **kwargs: Any,
     ) -> list[tuple[str, tuple[tuple[str, int | float | bool], str]]]:
+        # 中文注释：该评估器在“整段历史”上做一次 LLM 评分，
+        # 输出按 agent × 维度展开后的扁平结果，供环境统一聚合。
         # filter did nothing
         if not history and messages:
             messages_filtered = [
@@ -205,6 +207,7 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
             )
 
         try:
+            # 中文注释：动态统计参与者数量，避免多智能体场景下 key 数不匹配。
             # Count actual participating agents (exclude Environment)
             participating_agents = set()
             if messages:
@@ -213,6 +216,8 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                         participating_agents.add(speaker)
             num_agents = len(participating_agents)
 
+            # 中文注释：明确要求模型使用固定 key（agent_1 ... agent_n），
+            # 降低 structured output 中动态键名带来的解析歧义。
             # Build explicit agent label instruction to avoid ambiguous dynamic keys in structured output
             agent_instruction = ""
             if num_agents > 0:
@@ -225,6 +230,7 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                     + "] (no other keys).\n"
                 )
 
+            # 中文注释：优先走结构化输出；若模型不支持则降级为普通文本+解析。
             # Use structured output if model supports it (not just custom/structured endpoints)
             use_structured_output = self.model_name.startswith(
                 "custom/structured"
@@ -246,6 +252,7 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                 structured_output=use_structured_output,
             )
             response_list = []
+            # 中文注释：只消费真实参与 agent 的评估，避免越界或脏键。
             # Only process evaluations for the actual number of agents
             for i, evaluation in enumerate(
                 list(response.evaluations.values())[:num_agents]

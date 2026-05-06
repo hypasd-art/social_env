@@ -292,3 +292,205 @@ cd scripts
   代码全在 `sotopia/cli/benchmark/benchmark.py`。
 - **想合成自己的测试题**：用 `examples/generate_scenarios.py` + `sotopia/generation_utils/generate.py`。
 - **流程总枢纽**：`sotopia/server.py` → `sotopia/envs/parallel.py` → `sotopia/envs/evaluators.py` → `sotopia/database/logs.py`。
+
+
+
+
+# 运行说明
+
+# python examples/minimalist_demo.py
+
+下面给你一张完整的「调用时序表」，从你按下 `python examples/minimalist_demo.py` 那一刻开始，到 demo 跑完为止。每一行包含：**调用谁 / 在哪个文件 / 它做什么**。能省略的细节（warning、错误处理）已省。
+
+---
+
+## 阶段 0：进程启动 + import 副作用（在 `asyncio.run` 之前）
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 0.1 | `import sotopia.samplers` | `examples/minimalist_demo.py:11` | 触发 sotopia 包加载 |
+| 0.2 | `sotopia/database/__init__.py` 顶层执行 | `sotopia/database/__init__.py:122-156` | 读 `os.environ["SOTOPIA_STORAGE_BACKEND"]`；你设的是 `local`，所以走 `LocalJSONBackend`，打印 `Using local JSON storage backend at /home/yphao/.sotopia/data` |
+| 0.3 | `patch_model_for_local_storage(AgentProfile/EnvironmentProfile/...)` | `sotopia/database/persistent_profile.py:219-222` + `base_models.py:111-242` | 给 `AgentProfile.save()/.get()/.all()/.find()` 等方法打补丁，改成读写 `~/.sotopia/data/{ClassName}/{pk}.json` |
+| 0.4 | `from sotopia.server import run_async_server` | `examples/minimalist_demo.py:12` | 导入主循环入口 |
+| 0.5 | `logging.basicConfig(...)` + `RichHandler` | `examples/minimalist_demo.py:19-24` | 配置漂亮日志输出 |
+
+> 这之后 demo 已经能"知道"本地数据库在哪，但还没读任何文件。
+
+---
+
+## 阶段 1：进入 `run_async_server`（事件循环开始）
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 1.1 | `asyncio.run(run_async_server(...))` | `examples/minimalist_demo.py:27-36` | 把 `run_async_server` 协程交给 asyncio 事件循环 |
+| 1.2 | `run_async_server(model_dict, sampler, ...)` | `sotopia/server.py:274-382` | 总调度器；本次 `model_dict={"env","agent1","agent2"}` 全是 gpt-4o-mini，sampler 是 `UniformSampler` |
+| 1.3 | `get_agent_class("gpt-4o-mini")` → `LLMAgent` | `sotopia/server.py:307-317` | 既不是 "human" 也不是 "redis"，所以两个 agent 都用 `LLMAgent`（位于 `sotopia/agents/llm_agent.py`） |
+| 1.4 | 构造 `env_params` | `sotopia/server.py:325-337` | 给 ParallelSotopiaEnv 准备的参数。**关键两个 evaluator**：<br>• `RuleBasedTerminatedEvaluator(max_turn_number=20, max_stale_turn=2)`（`sotopia/envs/evaluators.py`）<br>• `EpisodeLLMEvaluator(model="gpt-4o-mini", EvaluationForAgents[SotopiaDimensions])` |
+| 1.5 | `sampler.sample(...)` 返回 `env_agent_combo_iter` | `sotopia/server.py:346-356` | 真正的采样调用——见阶段 2 |
+
+---
+
+## 阶段 2：`UniformSampler.sample` —— 抽出"题目和角色"
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 2.1 | `EnvironmentProfile.all()` | `sotopia/samplers/uniform_sampler.py:53` → patched 版 `base_models.py:205-209` → `LocalJSONBackend.all()` (`storage_backend.py`) | **扫描 `~/.sotopia/data/EnvironmentProfile/*.json`** 把每个 JSON 反序列化为 `EnvironmentProfile` 对象。命中你 seed 进去那 1 条（咖啡店场景） |
+| 2.2 | `AgentProfile.all()` | `uniform_sampler.py:59` 同链路 | 扫描 `~/.sotopia/data/AgentProfile/*.json` 拿到 Alex Johnson + Sam Kim 这 2 条 |
+| 2.3 | `random.choice(env_candidates)` | `uniform_sampler.py:65` | 只有 1 条 env，所以选中那一条 |
+| 2.4 | `ParallelSotopiaEnv(env_profile=...)` 构造 | `uniform_sampler.py:69`，类定义在 `sotopia/envs/parallel.py:216` 起 | 创建并行环境对象（继承自 PettingZoo `ParallelEnv`），保存场景、agent_goals、evaluator 列表等 |
+| 2.5 | `random.sample(agent_candidates, 2)` + 创建 2 个 `LLMAgent` | `uniform_sampler.py:75-87` | 给两个 LLMAgent 实例分别绑定一个 AgentProfile 和 model_name="gpt-4o-mini" |
+| 2.6 | `agent.goal = env.profile.agent_goals[i]` | `uniform_sampler.py:88-90` | 把每个 agent 的"社交目标"塞进它自己（来自 `EnvironmentProfile.agent_goals`） |
+| 2.7 | `yield env, agents` | `uniform_sampler.py:92` | 返回一组 `(env, [agent1, agent2])` |
+
+> 控制台你会看到这一行就是阶段 2 完成的标志：
+> ```
+> INFO - sotopia.samplers.uniform_sampler - Creating ParallelSotopiaEnv with 2 agents
+> ```
+
+---
+
+## 阶段 3：`arun_one_episode` —— 单局对弈准备
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 3.1 | `arun_one_episode(env, agent_list, ...)` | `sotopia/server.py:118 起，被 357-368 行调用并 gather` | 运行单条 episode 的协程 |
+| 3.2 | `Agents({a.agent_name: a for a in agent_list})` | `server.py:134` | 把 agent 列表包成名字 → 实例的字典 |
+| 3.3 | `env.reset(agents=agents, omniscient=False)` | `server.py:139`，定义在 `sotopia/envs/parallel.py:216` | **关键 reset**：根据 EnvironmentProfile 生成 `ScriptBackground`（场景描述、两位的角色背景、目标），并塞给每个 agent 的 inbox。返回每个 agent 看到的初始 `Observation` |
+| 3.4 | `agents.reset()` | `server.py:140` | 清空每个 LLMAgent 的内部状态（goal、inbox） |
+| 3.5 | 把初始 observation 写进 `messages` 列表 | `server.py:145-151` | 这就是日志里 turn 0 的内容，第一条 `yield messages` |
+| 3.6 | 给每个 agent 设 `goal` | `server.py:154-155` | 再赋一次（防止 reset 清掉了） |
+
+---
+
+## 阶段 4：主对弈循环（`while not done:`）
+
+每一轮（最多 20 轮，见 `RuleBasedTerminatedEvaluator(max_turn_number=20)`）做：
+
+### 4A. 两个 agent **并行**生成动作
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 4A.1 | `await asyncio.gather(*[agents[name].aact(obs) ...])` | `server.py:162-167` | 两个 agent 同时进入 LLM 调用 |
+| 4A.2 | `LLMAgent.aact(obs)` | `sotopia/agents/llm_agent.py:64-103` | 单个 agent 的"思考一回合" |
+| 4A.3 | `self.recv_message("Environment", obs)` | `llm_agent.py:65`（实现在 `base_agent.py`） | 把刚到的 observation 塞进自己的 inbox |
+| 4A.4 | （首回合才走）`agenerate_goal(...)` | `llm_agent.py:68-73` → `sotopia/generation_utils/generate.py` | 用 LLM 推断/澄清自身 goal（首回合只调一次） |
+| 4A.5 | `agenerate_action(model_name, history, turn_number, action_types, agent, goal, structured_output=True, ...)` | `llm_agent.py:90-102` → `sotopia/generation_utils/generate.py` | **真正打 LLM 的地方**。内部 → `agenerate(...)` → `litellm.acompletion(model="gpt-4o-mini", base_url=os.environ["OPENAI_BASE_URL"], api_key=...)` 走你 `.env` 里设的 `https://api.v3.cm/v1` |
+| 4A.6 | LLM 返回 JSON，解析为 `AgentAction(action_type=speak/non-verbal/leave/action/none, argument=..., to=[...])` | `output_parsers.py` | 结构化输出 |
+| 4A.7 | `AgentAction.model_validate(..., context={"agent_names":...,"sender":...})` | `server.py:182-186` | 校验 `to=` 收件人合法。失败则发回错误信息让 agent 重生成一次（4A.5 的重试） |
+
+### 4B. 把动作交给环境推进一步
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 4B.1 | `await env.astep(agent_messages)` | `server.py:217`，定义在 `sotopia/envs/parallel.py:496-566` | 环境 turn++、记录所有 actions、跑 evaluator、生成下一轮 observation |
+| 4B.2 | `self._process_incoming_actions(actions)` | `parallel.py:508` | 把 dict[name→Action] 整理成内部消息序列 |
+| 4B.3 | `await self._run_evaluators(self.evaluators)` | `parallel.py:510` | 跑 `RuleBasedTerminatedEvaluator`：判定是否到达 `max_turn=20` 或连续 `max_stale_turn=2` 没新内容 → 决定本回合是否 `terminated` |
+| 4B.4 | （仅 terminated 时）`await self._run_evaluators(self.terminal_evaluators)` | `parallel.py:513` | 跑 `EpisodeLLMEvaluator`：**再次调 LLM**（同一 model）按 `SotopiaDimensions` 的 7 个维度（goal/believability/relationship/knowledge/secret/social_rules/financial）打分，结构化输出 |
+| 4B.5 | 计算下一轮 `action_mask`（round-robin 让两个 agent 轮流发言）+ 构造每个 agent 的 `Observation` | `parallel.py:522-555` | 决定下一回合谁能说话；`available_actions` 为 `["none"]` 表示这回合该轮空 |
+| 4B.6 | 返回 `(obs, rewards, terminated, _, info)` | `parallel.py:557-566` | 给主循环 |
+
+### 4C. 主循环把这一轮记录到 `messages` 并判 `done`
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 4C.1 | `messages.append([(env_name, agent_name, environment_messages[name]) ...])` | `server.py:218-223` | 写日志 |
+| 4C.2 | `rewards.append(...) ; reasons.append(...)` | `server.py:225-228` | 累计 |
+| 4C.3 | `done = all(terminated.values())` | `server.py:229` | 所有 agent 都 terminated 才退出循环 |
+
+---
+
+## 阶段 5：Episode 结束 → 写入 `EpisodeLog`
+
+| # | 调用 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| 5.1 | 构造 `EpisodeLog(...)` | `server.py:230-241` | 收集这一局所有信息：`environment` / `agents` / `models` / 整段 `messages`（每条转 natural language）/ `reasoning`（来自 LLM 评估器的 comments）/ `rewards`（每个 agent 的 complete_rating） |
+| 5.2 | （`push_to_db=True` 时才执行）`epilog.save()` | `server.py:253-264`（patched 版 `base_models.py:128-144`） | 把整局存到 `~/.sotopia/data/EpisodeLog/{uuid}.json`<br>**注意**：`run_async_server(... push_to_db=False)` 默认是 False，所以 demo 默认**不写盘**，只在内存里跑完 |
+| 5.3 | `flatten_listed_messages(last_messages)` | `server.py:271` | 把嵌套 messages 拍平返回 |
+| 5.4 | 回到 `run_async_server` 的 `asyncio.gather(*episode_futures)` | `server.py:370-374` | 单局完成 |
+| 5.5 | `return batch_results` | `server.py:382` | 整个 demo 退出 |
+
+---
+
+## 整张时序图（一图速查）
+
+```
+python examples/minimalist_demo.py
+│
+├─ import sotopia.samplers / .server          ← 触发 sotopia/database/__init__.py
+│       └─ Using local JSON storage backend at ~/.sotopia/data
+│
+├─ asyncio.run( run_async_server(...) )       ← server.py:274
+│       │
+│       ├─ get_agent_class → LLMAgent         ← server.py:307
+│       │
+│       ├─ env_params = {evaluators=[Rule, EpisodeLLM]}   ← server.py:325
+│       │
+│       ├─ sampler.sample()                   ← uniform_sampler.py:18
+│       │       ├─ EnvironmentProfile.all()   ← 读 ~/.sotopia/data/EnvironmentProfile/*.json
+│       │       ├─ AgentProfile.all()         ← 读 ~/.sotopia/data/AgentProfile/*.json
+│       │       ├─ ParallelSotopiaEnv(env_profile=...)
+│       │       └─ LLMAgent × 2  + agent.goal=...
+│       │
+│       └─ arun_one_episode(env, agents)      ← server.py:118
+│               │
+│               ├─ env.reset()                 ← parallel.py:216  → ScriptBackground 写 inbox
+│               │
+│               └─ while not done:             ← server.py:158-229  (≤20 turns)
+│                       │
+│                       ├─ asyncio.gather( LLMAgent.aact(obs) × 2 )    ← llm_agent.py:64
+│                       │       └─ agenerate_action(..., model="gpt-4o-mini")
+│                       │             └─ litellm.acompletion()         ← generate.py:91
+│                       │                   └─ HTTPS POST  https://api.v3.cm/v1/chat/completions
+│                       │
+│                       ├─ env.astep(actions)                          ← parallel.py:496
+│                       │       ├─ RuleBasedTerminatedEvaluator        ← evaluators.py
+│                       │       └─ (terminated 时) EpisodeLLMEvaluator  ← evaluators.py
+│                       │             └─ 再调一次 LLM 打 7 维分数
+│                       │
+│                       └─ messages.append(...) ; done = all(terminated)
+│
+└─ EpisodeLog(messages, rewards, reasoning, ...)   ← server.py:230
+        └─ (默认不 save，因为 push_to_db=False)
+```
+
+---
+
+## 哪些 LLM 请求会被发出去（计费层面）
+
+每局会有这么多次 `litellm.acompletion`：
+
+| 请求 | 次数 | 何时 |
+| --- | --- | --- |
+| `agenerate_goal` | 2 | 仅首回合，每个 agent 一次 |
+| `agenerate_action` | 2 × N | 每回合两个 agent 各一次（其中实际"该 agent 说话"的那个会真出 speak/non-verbal，另一个只能输出 `none`） |
+| `EpisodeLLMEvaluator` 评分 | 1 | episode 结束时（结构化 7 维 JSON） |
+
+`gpt-4o-mini` 一局对话 token 大约 5k-15k，按 v3.cm 的报价应该远不到 1 美分。
+
+---
+
+## TL;DR
+
+```
+minimalist_demo.py
+  └─ run_async_server                  (sotopia/server.py)
+        ├─ UniformSampler.sample       (sotopia/samplers/uniform_sampler.py) ── 读本地 JSON
+        └─ arun_one_episode            (sotopia/server.py)
+              ├─ env.reset             (sotopia/envs/parallel.py)            ── 生成场景 + 角色
+              └─ loop:
+                    ├─ LLMAgent.aact   (sotopia/agents/llm_agent.py)
+                    │     └─ agenerate_action → litellm.acompletion (sotopia/generation_utils/generate.py)
+                    │           └─ POST https://api.v3.cm/v1/chat/completions
+                    └─ env.astep       (sotopia/envs/parallel.py)
+                          └─ Rule + EpisodeLLM 评估器  (sotopia/envs/evaluators.py)
+```
+
+整个数据/控制流：**LocalJSON 后端 → UniformSampler 抽场景+角色 → 主循环交替 LLM 决策与环境步进 → 终局 7 维 LLM 打分 → 内存返回**（默认不写盘）。
+
+如果想看真实跑出来的轨迹（每条 LLM 请求和回答），加这两行环境变量再跑：
+
+```bash
+export LITELLM_LOG=DEBUG
+export PYTHONUNBUFFERED=1
+SOTOPIA_STORAGE_BACKEND=local python examples/minimalist_demo.py
+```

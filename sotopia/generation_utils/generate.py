@@ -140,6 +140,8 @@ def _build_json_schema_response_format(
     Returns:
         Complete response_format dict with type, json_schema, name, schema, strict
     """
+    # 中文注释：先拿到 Pydantic schema，并清洗名称，避免不符合 OpenAI 命名约束
+    #（例如包含 []、空格等字符）。
     # Sanitize the schema name
     schema = pydantic_class.model_json_schema()
     original_name = schema.get("title", pydantic_class.__name__)
@@ -153,6 +155,8 @@ def _build_json_schema_response_format(
 
     use_strict = not issubclass(pydantic_class, LLMEvalBaseModel)
 
+    # 中文注释：返回 litellm/openai 期望的 response_format 结构，
+    # 后续会直接传给 acompletion(..., response_format=...).
     # Build response format
     return {
         "type": "json_schema",
@@ -212,6 +216,7 @@ async def agenerate(
         ...     structured_output=True,
         ... )
     """
+    # 中文注释：构造“坏输出修复模型”，当主模型返回不可解析文本时用于二次修复。
     # Format template with input values
     bad_output_process_model = (
         bad_output_process_model or DEFAULT_BAD_OUTPUT_PROCESS_MODEL
@@ -219,13 +224,17 @@ async def agenerate(
     if "format_instructions" not in input_values:
         input_values["format_instructions"] = output_parser.get_format_instructions()
 
+    # 中文注释：统一做文档字符串去缩进，减少提示词格式噪声。
     # Process template
     template = format_docstring(template)
 
+    # 中文注释：把模板变量替换成具体上下文。
     # Replace template variables
     for key, value in input_values.items():
         template = template.replace(f"{{{key}}}", str(value))
 
+    # 中文注释：支持 custom/model@base_url 语法，
+    # 便于接入 OpenAI-compatible 的第三方网关。
     if model_name.startswith("custom"):
         base_url, api_key = (
             model_name.split("@")[1],
@@ -244,6 +253,7 @@ async def agenerate(
 
     messages = [{"role": "user", "content": template}]
     if structured_output:
+        # 中文注释：结构化输出分支，强制模型按 JSON Schema 返回。
         if not base_url:
             assert supported_params is not None
             assert (
@@ -261,6 +271,8 @@ async def agenerate(
             output_parser.pydantic_object
         )
 
+        # 中文注释：drop_params=True 会自动忽略不支持的参数，
+        # 降低跨 provider 的兼容成本。
         # Build completion kwargs with structured output
         completion_kwargs = {
             "model": model_name,
@@ -274,6 +286,7 @@ async def agenerate(
             completion_kwargs["temperature"] = temperature_value
         response = await acompletion(**completion_kwargs)
     else:
+        # 中文注释：普通文本输出分支（不带 response_format）。
         # Build completion kwargs for standard output
         completion_kwargs = {
             "model": model_name,
@@ -287,6 +300,7 @@ async def agenerate(
         response = await acompletion(**completion_kwargs)
     result = response.choices[0].message.content
 
+    # 中文注释：只有 Pydantic 解析器支持 context（例如 action 校验上下文）。
     # Only PydanticOutputParser supports context parameter
     parse_kwargs = (
         {"context": context} if isinstance(output_parser, PydanticOutputParser) else {}
@@ -295,6 +309,7 @@ async def agenerate(
     try:
         parsed_result = output_parser.parse(result, **parse_kwargs)
     except Exception:
+        # 中文注释：一次解析失败后，尝试“先修格式再解析”，提高鲁棒性。
         reformat_result = await format_bad_output(
             result,
             output_parser,
