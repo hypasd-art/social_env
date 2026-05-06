@@ -1,0 +1,53 @@
+import { Callout } from 'nextra/components'
+
+# Example Scripts For Using The Library
+
+<Callout type="info" emoji="ℹ️">
+  Before running examples, please install extra dependencies with `pip install sotopia[examples]` or `uv run --extra examples <the example script>` if you are using uv.
+</Callout>
+
+```python
+python examples/evaluate_existing_episodes.py --tag=<tag to upload to the database> --model=<the model used to re-evaluate the existing episodes> --batch_size=<batch size used for evaluation> --push-to-db
+```
+
+Run ```python examples/evaluate_existing_episodes.py --help``` for more information.
+
+### Example 1.1: benchmarking the evaluator
+```python
+python examples/benchmark_evaluator.py --push-to-db --model=<the model used to be evaluated as evaluator> --tag=<tag to upload to the database> --batch_size=10
+```
+
+## Example 2: Generate script-like episodes
+See `docs/simulation_modes.md` for more information.
+
+## Example 3: Multi-Agent Private Messages
+Sotopia supports private messaging between agents, allowing agents to send messages that are only visible to specific recipients. This enables private conversations, secret planning, and side-channel communication in multi-agent scenarios.
+
+See `examples/experimental/multi_agents_private_dm/README.md` for more information and example scripts.
+
+### Quick Example
+```python
+from sotopia.messages import AgentAction
+from sotopia.envs import ParallelSotopiaEnv
+
+# Create actions with private messages
+actions = {
+    "agent1": AgentAction(
+        action_type="speak",
+        argument="Psst, agent2, let's discuss this privately",
+        to=["agent2"]  # Only visible to agent1 and agent2
+    ),
+    "agent2": AgentAction(
+        action_type="speak",
+        argument="Hello everyone!"  # Public message, visible to all
+    ),
+    "agent3": AgentAction(
+        action_type="speak",
+        argument="I'll talk to agent1",
+        to=["agent1"]  # Only visible to agent1 and agent3
+    ),
+}
+
+# Each agent will see different observations based on message visibility
+observations, rewards, done, truncations, info = env.step(actions)
+```

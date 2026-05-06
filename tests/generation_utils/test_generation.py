@@ -1,0 +1,74 @@
+import pytest
+from typing import Any
+
+from sotopia.generation_utils import agenerate
+
+from sotopia.messages import AgentAction
+from sotopia.generation_utils.output_parsers import (
+    PydanticOutputParser,
+    ListOfIntOutputParser,
+)
+
+
+@pytest.mark.asyncio
+async def test_agenerate_list_integer(
+    local_llama_model_name: str, mock_llm_response: Any
+) -> None:
+    """
+    async version of test_generate_list_integer
+    """
+    length, lower, upper = 5, -10, 10
+    # Configure mock to return a valid list of integers
+    mock_llm_response("1 2 3 4 5")
+
+    list_of_int = await agenerate(
+        local_llama_model_name,
+        "{format_instructions}",
+        {},
+        ListOfIntOutputParser(number_of_int=length, range_of_int=(lower, upper)),
+        temperature=0.0,
+    )
+    assert isinstance(list_of_int, list)
+    assert len(list_of_int) == length
+    assert all(isinstance(i, int) for i in list_of_int)
+    assert all(lower <= i <= upper for i in list_of_int)
+
+
+@pytest.mark.asyncio
+async def test_logging_behavior(
+    caplog: Any, local_llama_model_name: str, mock_llm_response: Any
+) -> None:
+    # Configure mock to return a valid list of integers
+    mock_llm_response("1 2 3 4 5")
+
+    # Call the function under test
+    caplog.set_level(15)
+    await agenerate(
+        local_llama_model_name,
+        "{format_instructions}",
+        {},
+        ListOfIntOutputParser(5, (-10, 10)),
+        temperature=0.0,
+    )
+    # Check if any log records were captured
+    assert len(caplog.records) > 0, "No log records captured"
+
+    # Optionally, you can print the captured log records for verification
+    for record in caplog.records:
+        print(f"Captured log: {record.levelname} - {record.message}")
+
+
+@pytest.mark.asyncio
+async def test_agenerate_structured_output(local_llama_model_name: str) -> None:
+    """
+    async version of test_generate_structured_output
+    """
+    output: AgentAction = await agenerate(
+        local_llama_model_name,
+        "{format_instructions}",
+        {},
+        PydanticOutputParser(pydantic_object=AgentAction),
+        temperature=0.0,
+        structured_output=True,
+    )
+    assert isinstance(output, AgentAction)
