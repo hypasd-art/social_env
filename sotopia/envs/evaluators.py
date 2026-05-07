@@ -236,21 +236,68 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                 "custom/structured"
             ) or supports_response_schema(model=self.model_name)
 
-            response: EvaluationForAgents[T_eval_dim] = await agenerate(
-                model_name=self.model_name,
-                template="""{history}
-                    Based on previous interactions, evaluate how well participants achieve their goals.
-                    {agent_instruction}
-                    Please follow the format:
-                    {format_instructions}
-                """,
-                input_values=dict(history=history, agent_instruction=agent_instruction),
-                output_parser=PydanticOutputParser[self.response_format_class](  # type: ignore[name-defined]
-                    pydantic_object=self.response_format_class
-                ),
-                temperature=temperature,
-                structured_output=use_structured_output,
+            # 中文注释：尝试最多 3 次：第 1 次正常请求；第 2/3 次额外注入
+            # "禁止返回 schema、必须填具体数据" 的提示，缓解 GPT-5 系列把
+            # response_format schema 当成数据原样回复的退化模式。
+            schema_echo_warn = (
+                "\n\nIMPORTANT: Do NOT echo the JSON Schema. "
+                "The response must be CONCRETE evaluation data filling "
+                "the schema, NOT the schema definition itself. "
+                "It must NOT contain any of these JSON Schema keywords: "
+                '"$ref", "additionalProperties", "title": "Evaluations", '
+                '"type": "object" at the top of \'evaluations\'. '
+                "Each agent key must contain real numeric scores and reasoning strings."
             )
+
+            last_exc: Exception | None = None
+            response: EvaluationForAgents[T_eval_dim] | None = None
+            for attempt in range(3):
+                extra = "" if attempt == 0 else schema_echo_warn
+                try:
+                    response = await agenerate(
+                        model_name=self.model_name,
+                        template="""{history}
+                            Based on previous interactions, evaluate how well participants achieve their goals.
+                            {agent_instruction}
+                            Please follow the format:
+                            {format_instructions}
+                            {extra}
+                        """,
+                        input_values=dict(
+                            history=history,
+                            agent_instruction=agent_instruction,
+                            extra=extra,
+                        ),
+                        output_parser=PydanticOutputParser[self.response_format_class](  # type: ignore[name-defined]
+                            pydantic_object=self.response_format_class
+                        ),
+                        temperature=temperature,
+                        structured_output=use_structured_output,
+                    )
+                    # 二次校验：检测 schema-echo 退化（attempt0 也走这一关）
+                    keys = set(response.evaluations.keys())  # type: ignore[union-attr]
+                    schema_keywords = {
+                        "additionalProperties",
+                        "$ref",
+                        "title",
+                        "type",
+                        "properties",
+                    }
+                    if keys & schema_keywords:
+                        raise ValueError(
+                            f"Schema echo detected: evaluations keys {keys}; "
+                            f"will retry with stronger instruction"
+                        )
+                    break  # 成功
+                except Exception as e:
+                    last_exc = e
+                    log.debug(
+                        f"[evaluator] attempt {attempt + 1}/3 failed: {e}"
+                    )
+                    response = None
+
+            if response is None:
+                raise last_exc or RuntimeError("Evaluator failed after 3 attempts")
             response_list = []
             # 中文注释：只消费真实参与 agent 的评估，避免越界或脏键。
             # Only process evaluations for the actual number of agents

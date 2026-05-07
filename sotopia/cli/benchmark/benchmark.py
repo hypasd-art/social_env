@@ -38,7 +38,7 @@ from sotopia.samplers import (
     BaseSampler,
     EnvAgentCombo,
 )
-from sotopia.server import run_async_server
+from sotopia.server import arun_one_episode, run_async_server  # noqa: F401
 
 from ..app import app
 from typing import Annotated
@@ -257,6 +257,57 @@ def check_existing_episodes(
     return episode_dict.get(episode_key, False)
 
 
+async def _run_episodes_with_semaphore(
+    env_agent_combo_list: list[EnvAgentCombo[Observation, AgentAction]],
+    *,
+    max_concurrency: int,
+    tag: str,
+    push_to_db: bool,
+) -> None:
+    """信号量驱动的"持续并发"调度：永远有 ``max_concurrency`` 条 episode 在跑。
+
+    与原来的"凑齐 ``batch_size`` 条 → ``run_until_complete``"相比：
+    - 不再出现"长尾 episode 拖累整批"的空窗，吞吐显著提升；
+    - 失败/异常的 episode 不会阻塞其它 episode（``return_exceptions=True``）；
+    - tqdm 进度按 episode 完成数滚动更新，UI 更直观。
+
+    LLM 限流仍由 ``max_concurrency`` 控制，等价于原来的 ``batch_size``。
+    """
+
+    sem = asyncio.Semaphore(max_concurrency)
+    pbar = tqdm(
+        total=len(env_agent_combo_list),
+        desc=f"Running episodes (concurrency={max_concurrency})",
+    )
+
+    async def _run_one(
+        combo: EnvAgentCombo[Observation, AgentAction],
+        idx: int,
+    ) -> None:
+        env, agents = combo
+        async with sem:
+            try:
+                # 直接调 arun_one_episode 而非 run_async_server，绕开里面的 batch 收尾逻辑
+                await arun_one_episode(
+                    env=env,
+                    agent_list=list(agents),
+                    tag=tag,
+                    push_to_db=push_to_db,
+                )
+            except Exception as e:
+                logging.error(f"Episode #{idx} failed: {e}", exc_info=True)
+            finally:
+                pbar.update(1)
+
+    try:
+        await asyncio.gather(
+            *(_run_one(c, i) for i, c in enumerate(env_agent_combo_list)),
+            return_exceptions=True,
+        )
+    finally:
+        pbar.close()
+
+
 def run_async_benchmark_in_batch(
     *,
     env_agent_combo_list: list[EnvAgentCombo[Observation, AgentAction]],
@@ -265,50 +316,61 @@ def run_async_benchmark_in_batch(
     push_to_db: bool = False,
     verbose: bool = False,
 ) -> None:
-    env_agent_combo_batch: list[EnvAgentCombo[Observation, AgentAction]] = []
+    """全并发版：``batch_size`` 现在表示"最大并发 episode 数"。
+
+    历史版本是把 ``env_agent_combo_list`` 切成 ``batch_size`` 大小的多个小批，
+    每批内部用 ``asyncio.gather`` 并发，但批与批之间串行——尾部的 episode
+    会拖累整批，等长尾跑完才能开下一批。
+
+    新实现用 ``asyncio.Semaphore(batch_size)`` 限流：永远有 ``batch_size`` 个
+    episode 在跑，一个完成立刻调度下一个。LLM 端看到的并发上限不变，吞吐提升。
+    """
+
+    if not env_agent_combo_list:
+        return
+
+    logging.info(
+        f"Running {len(env_agent_combo_list)} episodes "
+        f"with max_concurrency={batch_size} (tag={tag})"
+    )
+
     loop = asyncio.get_event_loop()
-    for env_agent_combo in tqdm(
-        env_agent_combo_list,
-        desc="Running all envs in batch",
-    ):
-        env_agent_combo_batch.append(env_agent_combo)
-        if len(env_agent_combo_batch) == batch_size:
-            logging.info(
-                f"Running batch of {batch_size} episodes: {env_agent_combo_batch}"
-            )
-            loop.run_until_complete(
-                run_async_server(
-                    sampler=BaseSampler[Observation, AgentAction](),
-                    env_agent_combo_list=env_agent_combo_batch,
-                    push_to_db=push_to_db,
-                    tag=tag,
-                )
-            )
-            env_agent_combo_batch = []
-    else:
-        if env_agent_combo_batch:
-            logging.info(
-                f"Running batch of {batch_size} episodes: {env_agent_combo_batch}"
-            )
-            loop.run_until_complete(
-                run_async_server(
-                    sampler=BaseSampler[Observation, AgentAction](),
-                    env_agent_combo_list=env_agent_combo_batch,
-                    push_to_db=push_to_db,
-                    tag=tag,
-                )
-            )
-        # remove episodes that has bad rewards
-        simulated_episodes = EpisodeLog.find(EpisodeLog.tag == tag).all()
-        valid_episodes = [
-            not isinstance(relevant_episode.rewards[0], float)  # type: ignore
-            for relevant_episode in simulated_episodes
-        ]
-        for valid, episode in zip(valid_episodes, simulated_episodes):
-            if not valid:
-                pk = episode.pk
-                if pk is not None:
-                    EpisodeLog.delete(pk)
+    loop.run_until_complete(
+        _run_episodes_with_semaphore(
+            env_agent_combo_list=env_agent_combo_list,
+            max_concurrency=max(1, batch_size),
+            tag=tag,
+            push_to_db=push_to_db,
+        )
+    )
+
+    # 收尾：把 evaluator 失败的 episode 打上 _bad_eval 后缀 tag 隔离起来，
+    # 而不是直接删除——这样能保留对话现场，方便后续排查 evaluator 输出问题。
+    # 如果想恢复"删除"老语义，把 SOTOPIA_QUARANTINE_BAD_EVAL=0 即可。
+    simulated_episodes = EpisodeLog.find(EpisodeLog.tag == tag).all()
+    quarantine = os.environ.get("SOTOPIA_QUARANTINE_BAD_EVAL", "1") != "0"
+    quarantined = 0
+    deleted = 0
+    for episode in simulated_episodes:
+        is_bad = isinstance(episode.rewards[0], float)  # type: ignore
+        if not is_bad:
+            continue
+        if quarantine:
+            episode.tag = f"{tag}__bad_eval"
+            episode.save()
+            quarantined += 1
+        else:
+            pk = episode.pk
+            if pk is not None:
+                EpisodeLog.delete(pk)
+                deleted += 1
+    if quarantined:
+        logging.warning(
+            f"Quarantined {quarantined} episodes with failed evaluator output "
+            f"(tag suffix '__bad_eval'); inspect them to debug evaluator schema issues"
+        )
+    if deleted:
+        logging.info(f"Deleted {deleted} episodes with bad rewards")
 
 
 def benchmark_display(

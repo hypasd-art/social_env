@@ -388,3 +388,37 @@ for ep in EpisodeLog.find(EpisodeLog.tag == 'try1').all():
 - [ ] 跑通一次 `examples/batch_demo.py --num-episodes 1`（确认 redis 数据 + LLM 链路都通）。
 
 按 §0 的决策树和 §3 的步骤执行，遇到 §7 表格里的报错按表修。
+
+
+
+下面是三个文件的对比；最后再附一个紧急说明（你诊断结果暴露的两件事）。
+
+## 三个入口的本质区别
+
+| 维度 | `examples/minimalist_demo.py` | `examples/experiment_eval.py` | `sotopia/cli/benchmark/benchmark.py` |
+|---|---|---|---|
+| **定位** | 5 行 demo，验证环境是否能跑 | **可配置的科研实验脚本** | **官方标准 benchmark CLI** |
+| **调用方式** | `python examples/minimalist_demo.py` | `python examples/experiment_eval.py --gin_file <file.gin>` | `sotopia benchmark --models ... --partner-model ... --task hard ...` |
+| **配置来源** | 代码里硬编码 | **gin-config 文件**（`@gin.configurable`，所有参数都从 .gin 文件覆盖） | **typer CLI 参数** |
+| **采样策略** | `UniformSampler()`（随机抽 1 个 env+随便配 agent） | `ConstraintBasedSampler`（按 env 的 `age/occupation` 约束 + 关系图找 agent，要求库里有 `RelationshipProfile`） | 直接用 **官方固定的 `EnvironmentList` + `EnvAgentComboStorage`**（hard 任务硬编码 pk `01HAK34YPB1H1RWXQDASDKHSNS`，覆盖 100 个 env-agent 组合） |
+| **任务范围** | 单条对话 | 遍历库里**所有** `EnvironmentProfile`（或你指定的 env_ids 子集） | 三种预设：`hard` / `cooperative` / `competitive`（可选），每种是官方挑好的子集 |
+| **Episode 数** | 1 | 取决于 env 数量 × 配置（默认每个 env 抽**第一个**未跑过的 agent 组合，一次一条） | 每个 hard env 都遍历 0/1 两个 index → 100 episode |
+| **批处理** | 无 | `batch_size`（gin 配置） | `--batch-size`（默认 10） |
+| **去重逻辑** | 无 | `check_existing_episodes(env_id, agent_ids, models, tag)`：**严格匹配 models** | `_list_all_env_agent_combo_not_in_db(...)`：**带 `agent_classes` + 区分 0/1 index 的更细去重**，且包了 `while True` 直到全跑完或重试 5 次 |
+| **写库** | `run_async_server` 默认不写库（看你传不传 tag/`push_to_db`） | 一律 `run_async_server(...)`，没显式 push_to_db，跟你传的 gin 配 | 显式 `--push-to-db` 才写；不写就只是测试 LLM 调用 |
+| **结果展示** | 只在终端打日志 | 只写 `EpisodeLog` 到 Redis，没有自带可视化 | 跑完会自动调 `benchmark_display(...)` 把 7 个维度（BEL/REL/KNO/SEC/SOC/FIN/GOAL）按模型聚合成 rich 表格，可加 `--output-to-jsonl` 导出 jsonl |
+| **评测器** | 用 `run_async_server` 内置的 evaluators | 显式构造 `EpisodeLLMEvaluator(EvaluationForAgents[SotopiaDimensions])` + `RuleBasedTerminatedEvaluator(max_turn=20)` | 同 `experiment_eval.py`，但额外做"`rewards[0] is float`"的过滤删除（脏数据清洗） |
+| **依赖** | 只需 OpenAI key + sampler 能从 Redis/local 取到 env | **必须有 Redis 全量数据**（含 `RelationshipProfile`、`AgentProfile`、`EnvironmentProfile`），否则 `ConstraintBasedSampler` 抛 `assert isinstance(age_constraint, str)` | **必须有 Redis 数据 + `EnvironmentList:01HAK34YPB1H1RWXQDASDKHSNS`**（hard 任务的固定 pk），否则起手就 NotFoundError |
+| **日志** | RichHandler，行级日志到 stdout | RichHandler + **FileHandler 写到 `./logs/HH_MM_DD_MM_YYYY_<git_hash>.log`** | 仅 RichHandler |
+| **可控性** | 几乎为 0 | 高（gin 文件可换任何参数：模型组合、env 子集、tag、batch_size …） | 中（typer 参数受限于设计的几个开关，但 partner/evaluator/task 都能改） |
+| **典型用途** | 第一次装好后跑通走流程；做 import / 网络代理调试 | **写论文做对比实验**：自己控制场景子集、模型组合、评测器、tag，结果用 SQL / 自己写脚本聚合 | **复现 sotopia-pi 论文里的标准结果**：固定的 100 个 hard env，与公开 leaderboard 一致 |
+
+## 一句话三选一
+
+- 想"先跑通看效果" → `minimalist_demo.py`
+- 想"做自己科研对比，挑数据 + 自定义评测" → `experiment_eval.py`
+- 想"复现官方 leaderboard、和别人比分数" → `sotopia/cli/benchmark/benchmark.py`（即 `sotopia benchmark` 命令）
+
+## 共用底盘
+
+三者最后都 **走同一个 `run_async_server(...)`**（`sotopia/server.py`）。它负责：构造 `ParallelSotopiaEnv` + `LLMAgent` → 跑 `astep()` 循环 → 调 evaluator → 构造 `EpisodeLog` → 落库（如 `push_to_db=True`）。所以三个文件的差异只在"**怎么挑场景 / 怎么配模型 / 怎么聚合结果**"，**不在对话与评测内核**。
