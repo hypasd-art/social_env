@@ -133,6 +133,9 @@ dmypy.json
 # data
 data/*
 
+# redis JSON exports (often hundreds of MB; e.g. EpisodeLog_raw.json)
+export/
+
 # deprecated
 deprecated/*
 
