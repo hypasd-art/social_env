@@ -533,14 +533,23 @@ class ParallelSotopiaEnv(ParallelEnv[str, Observation, AgentAction], MessengerMi
         else:
             self.action_mask = [True for _ in self.agents]
 
-        # Create info dictionary for all agents
-        info = {
-            agent_name: {
+        # Create info dictionary for all agents.
+        # 把 evaluator 计算出来的 p1_rate/p2_rate 真正回填到 complete_rating，
+        # 否则 server.py 里 rewards 永远是 [0, 0]，整个 episode 会被
+        # benchmark.py 的 quarantine 误判成 __bad_eval。
+        agent_list = list(self.agents)
+        info: dict[str, Any] = {}
+        for i, agent_name in enumerate(agent_list):
+            if i == 0:
+                rate: Any = response.p1_rate
+            elif i == 1:
+                rate = response.p2_rate
+            else:
+                rate = None
+            info[agent_name] = {
                 "comments": response.comments or "",
-                "complete_rating": 0,
+                "complete_rating": rate if rate is not None else 0,
             }
-            for agent_name in self.agents
-        }
         if response.terminated and self.terminal_evaluators:
             info["rewards_prompt"] = {
                 "overall_prompt": self.terminal_evaluators[0].prompt  # type: ignore

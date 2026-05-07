@@ -300,29 +300,41 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                 raise last_exc or RuntimeError("Evaluator failed after 3 attempts")
             response_list = []
             # 中文注释：只消费真实参与 agent 的评估，避免越界或脏键。
-            # Only process evaluations for the actual number of agents
+            # Only process evaluations for the actual number of agents.
+            # 中文注释：每个维度（如 believability）现在是
+            #     {"reasoning": str, "score": int}
+            # 老代码用 [1]/[0] 当 score/reasoning 索引，会抛 KeyError(1)
+            # 被外层 except 静默吞掉，导致 evaluator 输出全部丢失，
+            # 下游 p1_rate/p2_rate=None → rewards=[0,0] → 整局被 quarantine。
             for i, evaluation in enumerate(
                 list(response.evaluations.values())[:num_agents]
             ):
-                # Map agent names to expected format (agent_1, agent_2, etc.)
                 agent_key = f"agent_{i+1}"
-                for dimension in evaluation.model_dump().keys():
+                dump = evaluation.model_dump()
+                for dimension, value in dump.items():
+                    if isinstance(value, dict):
+                        score = value.get("score", 0)
+                        reasoning = value.get("reasoning", "")
+                    elif isinstance(value, (list, tuple)) and len(value) >= 2:
+                        # 兼容老 schema：(reasoning, score)
+                        reasoning, score = value[0], value[1]
+                    else:
+                        score, reasoning = 0, str(value)
                     response_list.append(
                         (
                             agent_key,
                             (
-                                (
-                                    dimension,
-                                    evaluation.model_dump()[dimension][1],
-                                ),
-                                evaluation.model_dump()[dimension][0],
+                                (dimension, score),
+                                reasoning,
                             ),
                         )
                     )
             return response_list
         except Exception as e:
-            print(e)
-            log.debug(f"[red] Failed to generate environment response. {e}")
+            log.warning(
+                f"[evaluator] Failed to convert LLM evaluation into response_list: "
+                f"{type(e).__name__}: {e}"
+            )
             return []
 
 
