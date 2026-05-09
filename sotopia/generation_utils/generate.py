@@ -152,8 +152,13 @@ def _build_json_schema_response_format(
     # which requires additionalProperties with a schema (for dynamic keys).
     # OpenAI's strict mode only allows additionalProperties: false, so we disable
     # strict mode for these models.
-
+    #
+    # ``AgentAction`` uses ``argument: str | dict[str, Any]``; the object branch yields
+    # ``anyOf`` JSON Schema entries that violate strict ``additionalProperties: false``
+    # on common OpenAI-compatible gateways (liteLLM -> proxy). Disable strict here too.
     use_strict = not issubclass(pydantic_class, LLMEvalBaseModel)
+    if pydantic_class is AgentAction:
+        use_strict = False
 
     # 中文注释：返回 litellm/openai 期望的 response_format 结构，
     # 后续会直接传给 acompletion(..., response_format=...).

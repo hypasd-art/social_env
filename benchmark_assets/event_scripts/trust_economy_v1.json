@@ -1,0 +1,21 @@
+{
+  "name": "trust_economy_rate_cycle_v1",
+  "category": "market",
+  "visibility": "public",
+  "intraday": false,
+  "apply_days": [5, 10, 15],
+  "description": "示例：在指定日历日的日终上调基准利率，压缩流动性。",
+  "effects": [
+    {
+      "op": "delta",
+      "target": "market_state.interest_rate",
+      "value": 0.01
+    },
+    {
+      "op": "delta",
+      "target": "resource_pool.liquidity_index",
+      "value": -5.0
+    }
+  ],
+  "tag": "prototype"
+}

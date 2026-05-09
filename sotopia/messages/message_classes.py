@@ -1,20 +1,43 @@
-import re
-from typing import Literal, cast
+from __future__ import annotations
 
-from pydantic import Field, field_validator, ValidationInfo
+import re
+from typing import Any, Literal, cast
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, field_serializer, ValidationInfo
 from pydantic_core import PydanticCustomError
 
-from sotopia.database import LLMBaseModel
 from sotopia.utils import format_docstring
 
-ActionType = Literal["none", "speak", "non-verbal communication", "action", "leave"]
+ActionType = Literal[
+    "none",
+    "speak",
+    "non-verbal communication",
+    "action",
+    "leave",
+    # --- benchmark v2 / 长周期社会系统结构化动作 ---
+    "propose_contract",
+    "accept",
+    "reject",
+    "transfer_resource",
+    "defect",
+    "invest",
+    "withdraw",
+    "vote",
+]
 
 
-class Message(LLMBaseModel):
-    """
-    An interface for messages.
-    There is only one required method: to_natural_language
-    """
+def _format_argument_for_display(argument: str | dict[str, Any]) -> str:
+    if isinstance(argument, dict):
+        import json
+
+        return json.dumps(argument, ensure_ascii=False)[:512]
+    return str(argument or "")[:512]
+
+
+class Message(BaseModel):
+    """消息接口抽象；子类只需实现 ``to_natural_language``。"""
+
+    model_config = ConfigDict(extra="forbid")
 
     def to_natural_language(self) -> str:
         raise NotImplementedError
@@ -142,8 +165,11 @@ class AgentAction(Message):
     action_type: ActionType = Field(
         description="whether to speak at this turn or choose to not do anything"
     )
-    argument: str = Field(
-        description="the utterance if choose to speak, the expression or gesture if choose non-verbal communication, or the physical action if choose action"
+    argument: str | dict[str, Any] = Field(
+        default="",
+        description="Natural-language content for speak/nonverbal/action text; "
+        "or JSON-serializable dict for structured social-system actions "
+        "(propose_contract, transfer_resource, vote, …).",
     )
     # New structured fields for private messages
     to: list[str] = Field(
@@ -153,18 +179,36 @@ class AgentAction(Message):
     def to_natural_language(self) -> str:
         recipients_prefix = "" if not self.to else f"[private to {self.to}] "
 
+        arg_s = _format_argument_for_display(self.argument)
+
         action_str = ""
-        match self.action_type:
-            case "none":
-                action_str = "did nothing"
-            case "speak":
-                action_str = f'said: "{self.argument}"'
-            case "non-verbal communication":
-                action_str = f"[{self.action_type}] {self.argument}"
-            case "action":
-                action_str = f"[{self.action_type}] {self.argument}"
-            case "leave":
-                action_str = "left the conversation"
+        at = self.action_type
+        if at == "none":
+            action_str = "did nothing"
+        elif at == "speak":
+            action_str = f'said: "{arg_s}"'
+        elif at == "non-verbal communication":
+            action_str = f"[{self.action_type}] {arg_s}"
+        elif at == "action":
+            action_str = f"[{self.action_type}] {arg_s}"
+        elif at == "leave":
+            action_str = "left the conversation"
+        elif at == "propose_contract":
+            action_str = f"[propose_contract] {arg_s}"
+        elif at == "accept":
+            action_str = f"[accept] {arg_s}"
+        elif at == "reject":
+            action_str = f"[reject] {arg_s}"
+        elif at == "transfer_resource":
+            action_str = f"[transfer_resource] {arg_s}"
+        elif at == "defect":
+            action_str = f"[defect] {arg_s}"
+        elif at == "invest":
+            action_str = f"[invest] {arg_s}"
+        elif at == "withdraw":
+            action_str = f"[withdraw] {arg_s}"
+        elif at == "vote":
+            action_str = f"[vote] {arg_s}"
 
         return f"{recipients_prefix} {action_str}"
 
@@ -208,6 +252,14 @@ class AgentAction(Message):
                 "non-verbal communication",
                 "action",
                 "leave",
+                "propose_contract",
+                "accept",
+                "reject",
+                "transfer_resource",
+                "defect",
+                "invest",
+                "withdraw",
+                "vote",
             ]
             if action_type in valid_types:
                 return action_type

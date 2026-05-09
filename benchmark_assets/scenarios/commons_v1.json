@@ -1,0 +1,15 @@
+{
+  "scenario_type": "commons",
+  "n_agents": 6,
+  "max_days": 20,
+  "intra_day_steps": 3,
+  "system_state_init": {
+    "market_state": {},
+    "resource_pool": {
+      "water": 120.0,
+      "energy": 200.0
+    },
+    "agent_resources": {}
+  },
+  "notes": "个体配额与投票结果可由 ActionDispatcher.vote / transfer_resource 写入 state.scratch。"
+}

@@ -1,0 +1,18 @@
+{
+  "scenario_type": "negotiation",
+  "n_agents": 4,
+  "max_days": 30,
+  "intra_day_steps": 4,
+  "roles": ["buyer", "seller", "investor", "regulator"],
+  "system_state_init": {
+    "market_state": {
+      "interest_rate": 0.03,
+      "deal_pressure": 0.0
+    },
+    "resource_pool": {
+      "liquidity_index": 100.0
+    },
+    "agent_resources": {}
+  },
+  "notes": "角色与资源由离线脚本或 upgrade_agent_profile 填充后再跑 SocialSystemEnv。"
+}

@@ -329,6 +329,7 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                             ),
                         )
                     )
+            # print(f"response_list: {response_list}")
             return response_list
         except Exception as e:
             log.warning(

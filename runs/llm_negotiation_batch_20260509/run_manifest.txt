@@ -1,0 +1,5 @@
+started: 2026-05-09T11:41:31+00:00
+--- command ---
+negotiation-batch -m gpt-4o-mini -e gpt-4o-mini -r 2 -b 1 --max-macro-steps 2000 --tag llm_negotiation_batch_20260509 -o results.jsonl
+finished: 2026-05-09T12:02:33+00:00
+exit_code: 0

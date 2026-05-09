@@ -1,0 +1,106 @@
+"""长期商业谈判世界 — 独立于 ``sotopia.envs.parallel`` 的控制逻辑与运行时。"""
+
+from .agent_state_variables import (
+    FirmAStateVariables,
+    FirmBStateVariables,
+    InvestorStateVariables,
+    NegotiationAgentMemoryVariables,
+    NegotiationPsychState,
+    RegulatorStateVariables,
+    firm_a_state_from_dict,
+    firm_b_state_from_dict,
+    investor_state_from_dict,
+    negotiation_psych_state_from_role,
+    psych_bundle_from_agent_dicts,
+    psych_state_to_prompt_addon,
+    regulator_state_from_dict,
+)
+from .controller import NegotiationWorldController, parse_agent_action_payload, remaining_days
+from .dummy_agents import (
+    NegotiationDummyPolicy,
+    NegotiationDummySharedState,
+    NegotiationRuleDummyAgent,
+    build_rule_dummy_agents,
+)
+from .env import LongTermNegotiationEnv, NegotiationEpisodeActor
+from .external_events import (
+    ExternalEventDefinition,
+    NegotiationExternalEventRunner,
+    external_event_from_dict,
+)
+from .negotiation_metrics import compute_negotiation_rule_metrics
+from .roles import (
+    CANONICAL_NEGOTIATION_ROSTER,
+    ROLE_SUMMARY_EN,
+    default_agent_resources_bundle,
+    validate_canonical_negotiation_roster,
+)
+from .session_roster import (
+    CANONICAL_SESSION_ROLES,
+    SessionRosterKind,
+    classify_session_roster,
+    roster_blocks_trade_contract_drafting,
+    section7_session_hints,
+)
+from .types import (
+    NegotiationContract,
+    NegotiationTimelineParams,
+    Phase,
+    PRINCIPAL_PARTY_ROLES,
+    ResolvedSession,
+    SESSION_SPEAKER_ROLE_ORDER,
+    SessionInviteRecord,
+    SessionRuntimeMeta,
+    WorldTerminalKind,
+    default_financing,
+    default_regulatory,
+)
+
+__all__ = [
+    "ExternalEventDefinition",
+    "NegotiationExternalEventRunner",
+    "external_event_from_dict",
+    "NegotiationEpisodeActor",
+    "NegotiationDummyPolicy",
+    "NegotiationDummySharedState",
+    "NegotiationRuleDummyAgent",
+    "build_rule_dummy_agents",
+    "compute_negotiation_rule_metrics",
+    "FirmAStateVariables",
+    "FirmBStateVariables",
+    "InvestorStateVariables",
+    "RegulatorStateVariables",
+    "NegotiationAgentMemoryVariables",
+    "NegotiationPsychState",
+    "firm_a_state_from_dict",
+    "firm_b_state_from_dict",
+    "investor_state_from_dict",
+    "regulator_state_from_dict",
+    "negotiation_psych_state_from_role",
+    "psych_bundle_from_agent_dicts",
+    "psych_state_to_prompt_addon",
+    "LongTermNegotiationEnv",
+    "NegotiationWorldController",
+    "NegotiationTimelineParams",
+    "WorldTerminalKind",
+    "NegotiationContract",
+    "Phase",
+    "ResolvedSession",
+    "SessionInviteRecord",
+    "SessionRuntimeMeta",
+    "SESSION_SPEAKER_ROLE_ORDER",
+    "PRINCIPAL_PARTY_ROLES",
+    "default_financing",
+    "default_regulatory",
+    "parse_agent_action_payload",
+    "remaining_days",
+    "CANONICAL_NEGOTIATION_ROSTER",
+    "ROLE_SUMMARY_EN",
+    "default_agent_resources_bundle",
+    "validate_canonical_negotiation_roster",
+    "CANONICAL_SESSION_ROLES",
+    "SessionRosterKind",
+    "classify_session_roster",
+    "roster_blocks_trade_contract_drafting",
+    "section7_session_hints",
+]

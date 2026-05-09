@@ -236,6 +236,7 @@ async def arun_one_episode(
                 [(m[0], m[1], m[2].to_natural_language()) for m in messages_in_turn]
                 for messages_in_turn in messages
             ],
+            agent_classes = [type(agent).__name__ for agent in agent_list],
             reasoning=info[env.agents[0]]["comments"],
             rewards=[info[agent_name]["complete_rating"] for agent_name in env.agents],
         )
@@ -459,6 +460,7 @@ async def arun_one_script(
             [(m[0], m[1], m[2].to_natural_language()) for m in messages_in_turn]
             for messages_in_turn in messages
         ],
+        agent_classes = [type(agent).__name__ for agent in agent_list],
         reasoning="".join(
             [str(info[agent]["comments"]) for agent in env.agents[:2]]
         ),  # Keep first 2 for compatibility
@@ -527,6 +529,7 @@ async def aevaluate_one_episode(
         tag=tag,
         models=[model, episode.models[1], episode.models[2]],
         messages=episode.messages,
+        agent_classes=episode.agent_classes,
         reasoning=str(info[episode.agents[0]]["comments"])
         + str(info[episode.agents[1]]["comments"]),
         rewards=[info[agent_name]["complete_rating"] for agent_name in episode.agents],

@@ -8,6 +8,9 @@ The approach uses monkey-patching of model classes at import time to add
 storage methods that work with the selected backend.
 """
 
+from __future__ import annotations
+
+
 import sys
 from typing import Any, Type, TypeVar
 

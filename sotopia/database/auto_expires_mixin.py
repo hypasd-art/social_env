@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from redis_om import JsonModel
 from redis_om.model.model import Field
 

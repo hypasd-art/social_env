@@ -5,6 +5,8 @@ either Redis or local JSON file storage, controlled by the SOTOPIA_STORAGE_BACKE
 environment variable.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import uuid
