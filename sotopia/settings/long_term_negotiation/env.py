@@ -93,10 +93,18 @@ class LongTermNegotiationEnv(MessengerMixin):
                 agent_resources={n: dict(bundle[n]) for n in names if n in bundle},
             )
         else:
+            from .roles import default_agent_resources_bundle as _default_bundle
+
+            bundle = _default_bundle()
             self.system_state = SystemState(
                 list(names),
                 agent_resources={
-                    n: {"cash": 250.0 if n == "regulator" else 400.0} for n in names
+                    n: (
+                        dict(bundle[n])
+                        if n in bundle
+                        else {"cash": 250.0 if n == "regulator" else 400.0}
+                    )
+                    for n in names
                 },
             )
         self.event_scripts = list(event_scripts or [])
@@ -281,6 +289,20 @@ class LongTermNegotiationEnv(MessengerMixin):
             )
 
         self.last_episode_macro_steps = int(steps)
+
+        terminal_resource_copy = {
+            k: dict(self.system_state.agent_resources.get(k, {}))
+            for k in self.system_state.agent_keys
+        }
+        self.ctrl.append_state_snapshot(
+            {
+                "label": "after_terminal",
+                "day_closed": int(self.ctrl.day),
+                "terminal": str(self.ctrl.terminal or "max_steps"),
+                "macro_steps": int(steps),
+                "agent_resources": terminal_resource_copy,
+            }
+        )
 
         self.turn_number = steps
         if self.terminal_evaluators:

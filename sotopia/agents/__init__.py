@@ -10,6 +10,7 @@ from .llm_agent import (
     ScriptWritingAgent,
 )
 from .memory import EpisodicMemory
+from .memory_episodic_summarizing import SummarizingEpisodicMemory
 from .redis_agent import RedisAgent
 from .social_agent import SocialLLMAgent
 
@@ -18,6 +19,7 @@ __all__ = [
     "LLMAgent",
     "SocialLLMAgent",
     "EpisodicMemory",
+    "SummarizingEpisodicMemory",
     "Agents",
     "HumanAgent",
     "generate_background",

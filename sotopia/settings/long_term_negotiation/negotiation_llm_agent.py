@@ -29,34 +29,37 @@ from .roles import ROLE_SUMMARY_EN
 
 # 与 ``agenerate_action`` 默认模板变量一致：由 ``agenerate`` 注入 goal / format_instructions 等。
 NEGOTIATION_LLM_CUSTOM_TEMPLATE = """
-You are playing one turn in a **long-term business negotiation** simulator: calendar scheduling
-(§3) and formal session moves (§5–§6) with strict JSON tool payloads.
+You are **{agent}** in a **long-horizon business negotiation** simulator (multi-day calendar, formal JSON moves).
 
-How to use ``action_type`` and ``argument``:
-- ``speak``: ``argument`` is a short natural-language string (in-session dialogue).
-- ``non-verbal communication``: ``argument`` is a short string.
-- ``action``: ``argument`` MUST be a **JSON object** (mapping), not a quoted JSON string. Include fields
-  such as ``negotiation_op``, ``verb``, ``terms``, ``requester``, ``accept``, ``proposed_participants``,
-  ``purpose``, ``contract_id``, etc. **Copy field names and shapes from the latest Environment message**
-  in the interaction history (the block that starts with "Scheduling —" or "Active session").
-- ``leave``: use when the rules in the Environment text allow leaving the session as a top-level move;
-  if the Environment instead asks for ``session_control`` + ``leave`` inside JSON, prefer ``action`` with that payload.
-- ``none``: pass / no-op only when truly appropriate.
-
-Never invent negotiation_op names; follow the protocol text in the history for **this** turn.
-
-Role & design hints (not a substitute for the Environment JSON examples):
+## Priority (read in order)
+1. **Latest Environment turn** in the history below: it states the current phase (scheduling vs active session),
+   allowed moves, and often **literal JSON examples** for this step. Treat that text as authoritative.
+2. **Your private goal** appears under "Here is the context of the interaction" / goal lines — only you see your side's goal text.
+3. **Role & roster hints** (supplement only; do not contradict the Environment):
 {action_instructions}
 
-Imagine you are {agent}, your task is to act/speak as {agent} would, keeping in mind {agent}'s social goal.
-You can find {agent}'s goal (or background) in the 'Here is the context of the interaction' field.
-Note that {agent}'s goal is only visible to you.
-You should try your best to achieve {agent}'s goal in a way that aligns with their character traits.
-Additionally, maintaining naturalness is essential (e.g., avoid repeating others verbatim without reason).
-{history}
-You are at Turn #{turn_number}. Your available action types are {action_list}.
+## Action types (must pick one of ``{action_list}`` for this turn)
+- **speak** — In-session natural language; ``argument`` = short dialogue string (no JSON).
+- **non-verbal communication** — ``argument`` = short string.
+- **action** — Structured move; ``argument`` MUST be a **plain JSON object** (Python dict / mapping), **not** a string that contains JSON, **not** wrapped in markdown fences. Keys such as ``negotiation_op``, ``verb``, ``terms``, ``contract_id``, ``proposed_participants``, ``purpose``, ``accept``, etc. must **match names and nesting** shown in the Environment message for **this** turn (scheduling blocks vs "Active session" blocks differ).
+- **leave** — Only if the Environment explicitly allows a top-level leave; otherwise use **action** with the ``session_control`` / ``leave`` payload the Environment describes.
+- **none** — Only when the Environment makes clear that skipping is correct; avoid lazy ``none`` if a substantive move is expected.
 
-Please only generate a JSON output that matches the following format instructions (action type + argument + to):
+## JSON discipline (for ``action``)
+- Re-use **exact** ``negotiation_op`` / ``verb`` tokens from the Environment; do not invent new op names.
+- Omit keys you do not need; do not paste schema ``description`` / ``type`` / ``$defs`` text into ``argument``.
+- If unsure between two valid moves, prefer the smallest valid payload that still advances your goal and respects calendars/session rules.
+
+## Behaviour
+Stay in character, pursue your goal, and keep dialogue concise and non-repetitive relative to other participants' lines.
+
+--- Interaction history (newest relevant context is near the end) ---
+{history}
+
+--- Turn index ---
+You are at **Turn #{turn_number}** (environment counter). Available action types this turn: **{action_list}**.
+
+Output: a single JSON object matching the schema below (action type + argument + ``to`` list):
 {format_instructions}
 """
 
@@ -82,11 +85,20 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
     def _action_instruction_block(self, obs: Observation) -> str:
         role_line = ROLE_SUMMARY_EN.get(self.agent_name, self.agent_name)
         extra = self._role_goal_addon.strip()
-        parts = [f"- Your id: {self.agent_name!r}. Role summary: {role_line}"]
+        parts = [
+            f"- Your canonical id: {self.agent_name!r} (use this exact token when the protocol names actors).",
+            f"- Role summary: {role_line}",
+        ]
+        if self._all_participant_names:
+            roster = ", ".join(repr(n) for n in self._all_participant_names)
+            parts.append(f"- Episode roster (canonical participants): {roster}")
         if extra:
-            parts.append(f"- Additional goal / constraints: {extra}")
+            parts.append(f"- Scenario-specific goal / constraints: {extra}")
         if obs.action_instruction.strip():
-            parts.append(f"- Environment action_instruction field: {obs.action_instruction.strip()}")
+            parts.append(
+                "- Environment ``action_instruction`` (high-priority hint for this observation): "
+                f"{obs.action_instruction.strip()}"
+            )
         return "\n".join(parts)
 
     async def aact(self, obs: Observation) -> AgentAction:
@@ -96,12 +108,13 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
             self._goal = await agenerate_goal(
                 self.model_name,
                 background=self.inbox[0][1].to_natural_language(),
+                agent=self.agent_name,
             )
 
         if len(obs.available_actions) == 1 and "none" in obs.available_actions:
             return AgentAction(action_type="none", argument="", to=[])
 
-        mem_block = self.memory.recent(self.memory_inject_lines)
+        mem_block = await self.memory.arecent(self.memory_inject_lines)
         goal_effective = self._goal
         if mem_block:
             goal_effective = (
@@ -132,7 +145,7 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
             agent_names=agent_names,
             sender=self.agent_name,
         )
-        breakpoint()
+        # breakpoint()
         self.memory.add(
             f"T{obs.turn_number} [{self.agent_name}] {action.to_natural_language()}"
         )
@@ -142,9 +155,20 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
 def build_negotiation_social_llm_agents(
     model_dict: dict[str, str],
     roster: tuple[str, ...],
+    *,
+    memory_summary_model: str | None = None,
+    social_memory_kwargs: dict[str, Any] | None = None,
 ) -> dict[str, NegotiationSocialLLMAgent]:
-    """与 ``minimalist_demo`` / ``llm_evaluation`` 一致：`agent1`…`agentN` 对齐 ``roster`` 顺序。"""
+    """与 ``minimalist_demo`` / ``llm_evaluation`` 一致：`agent1`…`agentN` 对齐 ``roster`` 顺序。
+
+    记忆相关参数由 ``negotiation_run_config``（``--run-config`` JSON）经
+    ``build_negotiation_agents_from_run_config`` 注入；也可在代码里显式传入
+    ``memory_summary_model`` / ``social_memory_kwargs`` 覆盖 ``SocialLLMAgent`` 记忆行为。
+    """
     n = len(roster)
+    mem_kw = dict(social_memory_kwargs or {})
+    if memory_summary_model is not None:
+        mem_kw["memory_summary_model"] = memory_summary_model
     for i in range(n):
         key = f"agent{i + 1}"
         if key not in model_dict:
@@ -160,12 +184,15 @@ def build_negotiation_social_llm_agents(
             agent_name=role,
             model_name=mname,
             all_participant_names=participants,
+            **mem_kw,
         )
         summary = ROLE_SUMMARY_EN.get(role, role)
         ag.goal = (
             f"[{role}] {summary}\n"
-            "You negotiate under the environment protocol: use only allowed action types and "
-            "negotiation payloads exactly as described in each Environment observation."
+            "Operate strictly inside the simulator protocol: each turn, read the latest Environment "
+            "message for allowed action types and JSON shapes; when you use ``action``, the ``argument`` "
+            "must be a JSON object matching that message (never a quoted JSON string or markdown). "
+            "Advance your interests without breaking calendar/session rules or inventing negotiation_op names."
         )
         agents[role] = ag
     return agents

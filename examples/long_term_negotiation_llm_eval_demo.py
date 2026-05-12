@@ -8,6 +8,10 @@
 # 四方谈判::
 #
 #   PYTHONPATH=. python examples/long_term_negotiation_llm_eval_demo.py --quartet
+#
+# 若需要与 negotiation-batch 相同的 episode 单行摘要（INFO）与可选文件追加，可先调用::
+#   configure_negotiation_cli_logging(verbose_console=True, log_file=None)
+# （见 ``sotopia.settings.long_term_negotiation.eval_logging``）。
 
 from __future__ import annotations
 
@@ -40,18 +44,20 @@ from sotopia.settings.long_term_negotiation.llm_evaluation import (
 )
 
 
-async def _main(quartet: bool, skip_llm_scoring: bool, *, max_macro_steps: int) -> None:
+async def _main(
+    quartet: bool,
+    skip_llm_scoring: bool,
+    *,
+    max_macro_steps: int,
+    num_participants: int | None,
+) -> None:
     agent_model = os.getenv("NEGOTIATION_AGENT_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
     eval_model = os.getenv("NEGOTIATION_EVAL_MODEL", agent_model).strip() or agent_model
 
-    model_dict = {
-        "env": eval_model,
-        "agent1": agent_model,
-        "agent2": agent_model,
-    }
-    if quartet:
-        model_dict["agent3"] = agent_model
-        model_dict["agent4"] = agent_model
+    n = num_participants if num_participants is not None else (4 if quartet else 2)
+    model_dict: dict[str, str] = {"env": eval_model}
+    for i in range(1, n + 1):
+        model_dict[f"agent{i}"] = agent_model
 
     params = NegotiationTimelineParams(
         D=8,
@@ -69,6 +75,8 @@ async def _main(quartet: bool, skip_llm_scoring: bool, *, max_macro_steps: int) 
         eval_model,
         "| quartet=",
         quartet,
+        "| num_participants=",
+        n,
         "| skip_llm_scoring=",
         skip_llm_scoring,
         flush=True,
@@ -77,6 +85,7 @@ async def _main(quartet: bool, skip_llm_scoring: bool, *, max_macro_steps: int) 
     result = await run_llm_negotiation_episode_evaluation(
         model_dict,
         quartet=quartet,
+        num_participants=num_participants,
         params=params,
         max_macro_steps=max_macro_steps,
         run_terminal_llm_eval=not skip_llm_scoring,
@@ -99,7 +108,14 @@ if __name__ == "__main__":
         handlers=[RichHandler()],
     )
     ap = argparse.ArgumentParser(description="Long-term negotiation LLM eval (agents + optional terminal LLM scoring)")
-    ap.add_argument("--quartet", action="store_true", help="strict design roster (4 agents); requires agent3/agent4 in code path")
+    ap.add_argument("--quartet", action="store_true", help="implies 4 agents when --num-participants omitted")
+    ap.add_argument(
+        "--num-participants",
+        type=int,
+        default=None,
+        choices=[2, 3, 4],
+        help="override roster size (canonical order firm_a, firm_b, investor, regulator); default from --quartet",
+    )
     ap.add_argument(
         "--skip-llm-scoring",
         action="store_true",
@@ -118,6 +134,7 @@ if __name__ == "__main__":
                 quartet=args.quartet,
                 skip_llm_scoring=args.skip_llm_scoring,
                 max_macro_steps=args.max_macro_steps,
+                num_participants=args.num_participants,
             )
         )
     except Exception as exc:  # pragma: no cover

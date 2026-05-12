@@ -15,6 +15,10 @@
 3. ``build_eval_record`` — 把结果收成一条实验记录（experiment_tag / terminal / metrics 等）。
 4. … 外层 ``negotiation_eval_record_to_jsonable`` — 整条 batch 末尾对每条记录再走一遍，便于 ``json.dumps``。
 
+**日志与可读输出**（参见 ``eval_logging.py``）：JSONL ``-o`` 为结构化结果；``tqdm`` 为 stderr 进度；
+``sotopia.negotiation.batch`` logger 在每集输出 ``episode_start`` / ``episode_done`` 单行摘要（需 CLI
+``--print-logs`` 或 ``--log-file`` 将 root level 调至 INFO）。摘要中含 ``num_participants``（2/3/4）。
+
 **异步并发**
 
 - ``run_long_term_negotiation_eval_batch_async`` 为每条作业建协程，经 ``asyncio_gather_bounded``
@@ -25,27 +29,40 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import uuid
 from collections.abc import Awaitable, Sequence
+from pathlib import Path
 from typing import Any
 
 from tqdm import tqdm
 
 from .llm_evaluation import LongTermNegotiationEvalResult, run_llm_negotiation_episode_evaluation
+from .eval_logging import (
+    episode_done_line,
+    episode_start_line,
+    get_negotiation_batch_logger,
+)
 from .scenario_loader import load_negotiation_scenario_from_environment_profile_pk
-from .types import NegotiationTimelineParams
 
 
-def uniform_negotiation_model_dict(agent_model: str, evaluator_model: str, *, quartet: bool) -> dict[str, str]:
+def uniform_negotiation_model_dict(
+    agent_model: str,
+    evaluator_model: str,
+    *,
+    quartet: bool | None = None,
+    num_participants: int | None = None,
+) -> dict[str, str]:
     """与 ``minimalist_demo`` / ``llm_evaluation`` 一致：单方模型复用到 ``agent1``…``agentN``。"""
-    md: dict[str, str] = {
-        "env": evaluator_model,
-        "agent1": agent_model,
-        "agent2": agent_model,
-    }
-    if quartet:
-        md["agent3"] = agent_model
-        md["agent4"] = agent_model
+    if num_participants is None:
+        n = 4 if quartet else 2
+    else:
+        n = num_participants
+    if n < 2 or n > 4:
+        raise ValueError(f"num_participants must be 2..4, got {n}")
+    md: dict[str, str] = {"env": evaluator_model}
+    for i in range(1, n + 1):
+        md[f"agent{i}"] = agent_model
     return md
 
 
@@ -70,9 +87,11 @@ def build_eval_record(
     agent_model: str,
     evaluator_model: str,
     quartet: bool,
+    num_participants: int,
     result: LongTermNegotiationEvalResult,
     environment_profile_pk: str | None = None,
     scenario_codename: str | None = None,
+    negotiation_run_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     llm_dump: Any = None
     if result.llm_aggregate is not None:
@@ -83,6 +102,7 @@ def build_eval_record(
         "agent_model": agent_model,
         "evaluator_model": evaluator_model,
         "quartet": quartet,
+        "num_participants": num_participants,
         "terminal": result.terminal,
         "rule_metrics": result.rule_metrics,
         "llm_aggregate": llm_dump,
@@ -91,6 +111,8 @@ def build_eval_record(
         row["environment_profile_pk"] = environment_profile_pk
     if scenario_codename:
         row["scenario_codename"] = scenario_codename
+    if negotiation_run_config is not None:
+        row["negotiation_run_config"] = negotiation_run_config
     return row
 
 
@@ -110,7 +132,16 @@ async def asyncio_gather_bounded(
             return await coro
 
     barred = [wrap(c) for c in coroutines]
-    pbar = tqdm(total=len(barred), desc=progress_desc)
+    n_tot = len(barred)
+    pbar = tqdm(
+        total=n_tot,
+        desc=progress_desc[:100],
+        smoothing=0.05,
+        dynamic_ncols=True,
+        ascii=False,
+        bar_format="{desc}: |{bar:18}| {n}/{total} [{elapsed}<{remaining}] {rate_fmt}",
+        file=sys.stderr,
+    )
 
     async def track(coro: Awaitable[Any]) -> Any:
         try:
@@ -138,14 +169,29 @@ async def run_long_term_negotiation_eval_batch_async(
     experiment_tag_base: str = "negotiation_eval_batch",
     run_id: str | None = None,
     history_max_action_log: int | None = 500,
+    num_participants: int | None = None,
+    model_trace_dir: Path | str | None = None,
+    execution_trace_dir: Path | str | None = None,
+    negotiation_run_config: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """对多个 ``agent_models`` 各重复 ``repeats_per_model`` 次，并发上限 ``batch_size``。
 
     ``scenario_environment_pks`` 非空时：按 (场景 pk × agent_model × repeats) 展开；每场从
-    ``EnvironmentProfile.game_metadata`` 加载 ``NegotiationTimelineParams`` 与 ``quartet``。
-    此模式下 ``params`` / ``quartet`` 主参数不再用于单场（仍可为默认路径保留兼容）。
+    ``EnvironmentProfile.game_metadata`` 加载 ``NegotiationTimelineParams``、``quartet`` 与
+    ``num_participants``（缺省由 quartet 推断）。显式 ``num_participants`` 覆盖单场人数（含场景模式）。
+    此模式下 ``params`` / ``quartet`` 主参数不再用于单场时间轴与人数（仍可为无场景路径保留兼容）。
 
     返回已序列化友好的 ``dict`` 列表（可直接写 JSONL）。
+
+    ``model_trace_dir``：若指定，每场 ``run_llm_negotiation_episode_evaluation`` 将原始 LLM
+    completion 与解析结果写入该目录下 **按 agent 分文件** 的 JSONL，并另写终局评测文件（文件名由
+    episode 的 ``tag`` 派生，见 ``model_trace``）。
+
+    ``execution_trace_dir``：若指定，每场结束后写入 **全局执行档案** ``*.execution.json``
+    （合同里程碑、时间线、完整 ``action_log`` 等），文件名同样由 ``tag`` 派生。
+
+    ``negotiation_run_config``：与 ``negotiation-batch --run-config`` 相同；写入每条 JSONL
+    记录的 ``negotiation_run_config`` 字段以便复现。
     """
     if repeats_per_model < 1:
         raise ValueError("repeats_per_model must be >= 1")
@@ -168,41 +214,96 @@ async def run_long_term_negotiation_eval_batch_async(
                 seq += 1
 
     async def one(seq_i: int, agent_model: str, env_pk: str | None) -> dict[str, Any]:
+        log = get_negotiation_batch_logger()
         quartet_j = quartet
+        n_eff: int
         params_j = params
         env_meta_pk: str | None = None
         codename_display: str | None = None
         if env_pk is not None:
             sc = load_negotiation_scenario_from_environment_profile_pk(env_pk)
             quartet_j = sc.quartet
+            n_eff = num_participants if num_participants is not None else sc.num_participants
             params_j = None
             env_meta_pk = sc.environment_profile_pk
             codename_display = sc.codename or None
+        else:
+            n_eff = num_participants if num_participants is not None else (4 if quartet else 2)
 
-        md = uniform_negotiation_model_dict(agent_model, evaluator_model, quartet=quartet_j)
-        tag = f"{experiment_tag_base}_{rid}_{seq_i}"
-        res = await run_llm_negotiation_episode_evaluation(
-            md,
-            quartet=False if env_pk else quartet_j,
-            params=params_j,
-            environment_profile_pk=env_pk,
-            max_macro_steps=max_macro_steps,
-            run_terminal_llm_eval=run_terminal_llm_eval,
-            history_max_action_log=history_max_action_log,
+        md = uniform_negotiation_model_dict(
+            agent_model, evaluator_model, num_participants=n_eff
         )
+        tag = f"{experiment_tag_base}_{rid}_{seq_i}"
+        sl = episode_start_line(
+            seq=seq_i,
+            agent_model=agent_model,
+            env_pk=env_pk,
+            quartet=quartet_j,
+            num_participants=n_eff,
+            tag=tag,
+        )
+        log.info("── %s", sl)
+
+        try:
+            trace_kw: dict[str, Any] = {}
+            if model_trace_dir is not None:
+                trace_kw["model_trace_dir"] = model_trace_dir
+                trace_kw["model_trace_tag"] = tag
+            if execution_trace_dir is not None:
+                trace_kw["execution_trace_dir"] = execution_trace_dir
+                trace_kw["execution_trace_tag"] = tag
+            res = await run_llm_negotiation_episode_evaluation(
+                md,
+                quartet=quartet_j,
+                num_participants=num_participants,
+                params=params_j,
+                environment_profile_pk=env_pk,
+                max_macro_steps=max_macro_steps,
+                run_terminal_llm_eval=run_terminal_llm_eval,
+                history_max_action_log=history_max_action_log,
+                negotiation_run_config=negotiation_run_config,
+                **trace_kw,
+            )
+        except Exception:
+            log.exception(
+                "── episode_fail seq=%s agent_model=%r env_pk=%r tag=%r",
+                seq_i,
+                agent_model,
+                env_pk,
+                tag,
+            )
+            raise
+
+        dl = episode_done_line(
+            seq=seq_i,
+            terminal=str(res.terminal),
+            quartet=quartet_j,
+            num_participants=n_eff,
+            agent_model=agent_model,
+            env_pk=env_meta_pk or env_pk,
+            scenario_codename=codename_display,
+            rule_metrics=dict(res.rule_metrics),
+            scored_llm=res.llm_aggregate is not None,
+            tag=tag,
+        )
+        log.info("── %s", dl)
+
         return build_eval_record(
             experiment_tag=tag,
             seq=seq_i,
             agent_model=agent_model,
             evaluator_model=evaluator_model,
             quartet=quartet_j,
+            num_participants=n_eff,
             result=res,
             environment_profile_pk=env_meta_pk,
             scenario_codename=codename_display,
+            negotiation_run_config=negotiation_run_config,
         )
 
     coros = [one(s, am, pk) for s, am, pk in jobs]
-    raw = await asyncio_gather_bounded(coros, batch_size, progress_desc="long_term_negotiation batch")
+    prog = f"LTR batch jobs={len(coros)} concurrency<={batch_size}"
+    raw = await asyncio_gather_bounded(coros, batch_size, progress_desc=prog)
     return [negotiation_eval_record_to_jsonable(r) for r in raw]
 
 

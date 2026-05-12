@@ -8,7 +8,8 @@
 
 1. Typer 子命令 ``negotiation-batch`` → 函数 `negotiation_batch`（同上模块）。
    作用：解析命令行、构造 ``NegotiationTimelineParams``，委托批量评测，可选把每条
-   episode 的记录追加写入 JSONL。
+   episode 的记录追加写入 JSONL。可选 ``--run-config`` 指向 JSON，选用谈判 Agent 变体与
+   记忆后端（见 ``negotiation_run_config.load_negotiation_run_config``）。
 
 **下游（必读顺序）**
 
@@ -40,18 +41,24 @@
    ``evaluate_long_term_negotiation_llm_sync``），见 ``llm_evaluation.py`` 模块注释。
 - 批量：直接 import ``run_long_term_negotiation_eval_batch`` / ``*_async``，见 ``batch_evaluation.py``。
 
+**控制台 / 诊断日志**
+
+- 结构化评测结果：**-o/--output** JSONL（每行一条记录），不是文本 log。
+- 进度：``batch_evaluation.asyncio_gather_bounded`` 的 ``tqdm`` 写在 **stderr**。
+- Episode 单行摘要：`sotopia.negotiation.batch` logger（``episode_start`` / ``episode_done``），需在 CLI 打开
+  **--print-logs**（Rich 控制台）和/或 **--log-file**（UTF-8 纯文本追加）。实现：
+  ``sotopia.settings.long_term_negotiation.eval_logging.configure_negotiation_cli_logging``。
+
 控制台可执行入口见 ``python -m sotopia.cli.benchmark.negotiation_batch`` → `main()` → `app()`。
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
-from rich.logging import RichHandler
 
 from ..app import app
 
@@ -88,8 +95,19 @@ def negotiation_batch(
     ] = 1,
     quartet: Annotated[
         bool,
-        typer.Option("--quartet", help="四方 strict_design_v1 roster"),
+        typer.Option(
+            "--quartet",
+            help="无场景时：4 名参与者 + strict_design_v1；有场景时仍写入元数据提示，人数以场景/ --num-participants 为准",
+        ),
     ] = False,
+    num_participants: Annotated[
+        int | None,
+        typer.Option(
+            "--num-participants",
+            help="交互的 canonical 角色数 2–4（与 types.SESSION_SPEAKER_ROLE_ORDER 前缀一致）；"
+            "默认无场景时由 --quartet 决定，有场景时读 game_metadata；指定则覆盖场景",
+        ),
+    ] = None,
     skip_llm_scoring: Annotated[
         bool,
         typer.Option("--skip-llm-scoring", help="跳过 EpisodeLLMEvaluator，仅跑环境+智能体"),
@@ -103,7 +121,14 @@ def negotiation_batch(
         str,
         typer.Option(help="实验 tag 前缀（写入每条 record 的 experiment_tag 组成部分）"),
     ] = "",
-    print_logs: Annotated[bool, typer.Option(help="Rich 控制台日志")] = False,
+    print_logs: Annotated[bool, typer.Option(help="Rich 控制台日志（INFO；含每条 episode 起止单行摘要）")] = False,
+    log_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--log-file",
+            help="追加写入 UTF-8 纯文本 log（episode 摘要等与 --print-logs 同源 logger；无 ANSI）",
+        ),
+    ] = None,
     scenario_env_pk: Annotated[
         list[str] | None,
         typer.Option(
@@ -115,6 +140,16 @@ def negotiation_batch(
         Path | None,
         typer.Option("--scenario-manifest", help="manifest JSON（如 ~/.sotopia/data/long_term_negotiation_manifest.json）"),
     ] = None,
+    run_config: Annotated[
+        Path | None,
+        typer.Option(
+            "--run-config",
+            help=(
+                "JSON：谈判 Agent / 记忆后端等（见 sotopia.settings.long_term_negotiation.negotiation_run_config；"
+                "示例见同目录 run_config_examples/*.json）"
+            ),
+        ),
+    ] = None,
 ) -> None:
     """并行跑多组长期谈判 episode + 可选终局评测，输出 JSON 可聚合记录。
 
@@ -125,19 +160,35 @@ def negotiation_batch(
     from sotopia.settings.long_term_negotiation.batch_evaluation import (
         run_long_term_negotiation_eval_batch,
     )
+    from sotopia.settings.long_term_negotiation.eval_logging import (
+        configure_negotiation_cli_logging,
+    )
+    from sotopia.settings.long_term_negotiation.negotiation_run_config import (
+        load_negotiation_run_config,
+    )
     from sotopia.settings.long_term_negotiation.scenario_loader import (
         environment_pks_from_manifest,
     )
 
     models = agent_models if agent_models is not None else ["gpt-4o-mini"]
-    log_level = logging.INFO if print_logs else logging.WARNING
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="[%X]",
-        handlers=[RichHandler()] if print_logs else [logging.NullHandler()],
-    )
+    configure_negotiation_cli_logging(verbose_console=print_logs, log_file=log_file)
     tag_base = tag.strip() if tag.strip() else "negotiation_eval_batch"
+
+    negotiation_run_cfg: dict[str, Any] | None = None
+    if run_config is not None:
+        negotiation_run_cfg = load_negotiation_run_config(run_config)
+        mem = negotiation_run_cfg.get("memory") if isinstance(negotiation_run_cfg.get("memory"), dict) else {}
+        typer.echo(
+            typer.style(
+                f"[negotiation-batch] run-config={run_config} agent={negotiation_run_cfg.get('negotiation_agent')} "
+                f"memory.backend={mem.get('backend', 'plain')}",
+                fg=typer.colors.CYAN,
+            )
+        )
+
+    if num_participants is not None and not (2 <= num_participants <= 4):
+        typer.echo(typer.style("--num-participants must be between 2 and 4", fg=typer.colors.RED), err=True)
+        raise typer.Exit(code=1)
 
     scenario_pks: list[str] = []
     scenario_pks.extend(scenario_env_pk or [])
@@ -148,7 +199,16 @@ def negotiation_batch(
     if scenario_pks and quartet:
         typer.echo(
             typer.style(
-                "[negotiation-batch] --quartet ignored: roster comes from each scenario's EnvironmentProfile.",
+                "[negotiation-batch] --quartet ignored for sizing: roster size comes from "
+                "each scenario's game_metadata (use --num-participants to override).",
+                fg=typer.colors.YELLOW,
+            ),
+            err=True,
+        )
+    if scenario_pks and num_participants is not None:
+        typer.echo(
+            typer.style(
+                "[negotiation-batch] --num-participants overrides stored num_participants for every scenario job.",
                 fg=typer.colors.YELLOW,
             ),
             err=True,
@@ -169,7 +229,7 @@ def negotiation_batch(
         typer.style(
             f"negotiation-batch: agent_models={models}, evaluator={evaluator_model}, "
             f"batch_size={batch_size}, repeats={repeats}, quartet={quartet}, "
-            f"scenarios={len(scenario_pks)} env pk(s)",
+            f"num_participants={num_participants}, scenarios={len(scenario_pks)} env pk(s)",
             fg=typer.colors.CYAN,
         )
     )
@@ -178,6 +238,7 @@ def negotiation_batch(
             agent_models=models,
             evaluator_model=evaluator_model,
             quartet=False if scenario_pks else quartet,
+            num_participants=num_participants,
             repeats_per_model=repeats,
             batch_size=batch_size,
             params=params,
@@ -185,6 +246,7 @@ def negotiation_batch(
             max_macro_steps=max_macro_steps,
             run_terminal_llm_eval=not skip_llm_scoring,
             experiment_tag_base=tag_base,
+            negotiation_run_config=negotiation_run_cfg,
         )
     except Exception as exc:  # pragma: no cover
         typer.echo(typer.style(str(exc), fg=typer.colors.RED, bold=True), err=True)

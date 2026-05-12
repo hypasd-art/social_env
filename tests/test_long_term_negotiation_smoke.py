@@ -12,6 +12,7 @@ from sotopia.settings import (
     build_rule_dummy_agents,
     compute_negotiation_rule_metrics,
 )
+from sotopia.settings.long_term_negotiation import compute_negotiation_final_state_metrics
 
 
 class LongTermNegotiationSmokeTest(unittest.TestCase):
@@ -36,6 +37,20 @@ class LongTermNegotiationSmokeTest(unittest.TestCase):
         self.assertEqual(outcome, "success", msg=m)
         self.assertEqual(m.get("negotiation_terminal_is_success"), 1.0)
         self.assertGreater(m.get("negotiation_macro_steps_used", 0.0), 0.0)
+
+        # final intermediate-state score should be merged into rule_metrics.
+        self.assertIn("negotiation_final_state_score", m)
+        self.assertGreaterEqual(m["negotiation_final_state_score"], 0.0)
+        self.assertLessEqual(m["negotiation_final_state_score"], 1.0)
+        self.assertGreater(m.get("negotiation_final_state_n_snapshots", 0.0), 0.0)
+        # parity: standalone helper produces identical numbers.
+        sub = compute_negotiation_final_state_metrics(env)
+        for k, v in sub.items():
+            self.assertEqual(m[k], v, msg=k)
+        # in a successful bilateral run, the success component must be active.
+        self.assertEqual(
+            m["negotiation_final_state_score_component_terminal_success"], 0.4
+        )
 
 
 if __name__ == "__main__":

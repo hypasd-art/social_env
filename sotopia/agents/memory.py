@@ -21,6 +21,10 @@ class EpisodicMemory:
         take = list(self._buf)[-k:]
         return "\n".join(take)
 
+    async def arecent(self, k: int = 8) -> str:
+        """异步读取最近记忆；基类与同步 ``recent`` 等价，子类可覆盖为 LLM 压缩路径。"""
+        return self.recent(k)
+
     def clear(self) -> None:
         self._buf.clear()
 

@@ -7,8 +7,31 @@ from enum import Enum
 from typing import Any
 
 
-# §4.3 deterministic speaker order among participants（合并 session 后不依赖 requester）
+# §4.3 deterministic speaker order among participants — V1 ``with_institutional`` lineup
+# （历史 bilat / tri / quartet 模式取该元组前缀）。
 SESSION_SPEAKER_ROLE_ORDER: tuple[str, ...] = ("firm_a", "firm_b", "investor", "regulator")
+
+# `firms_only` lineup 的 speaker 顺序（3+ 公司、不含 investor / regulator）。
+SESSION_FIRMS_ONLY_ROLE_ORDER: tuple[str, ...] = ("firm_a", "firm_b", "firm_c", "firm_d")
+
+#: 受支持的 lineup 字符串（写入 ``EnvironmentProfile.game_metadata.lineup``）。
+NEGOTIATION_LINEUP_WITH_INSTITUTIONAL: str = "with_institutional"
+NEGOTIATION_LINEUP_FIRMS_ONLY: str = "firms_only"
+SUPPORTED_NEGOTIATION_LINEUPS: frozenset[str] = frozenset(
+    {NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, NEGOTIATION_LINEUP_FIRMS_ONLY}
+)
+
+
+def negotiation_role_order(lineup: str) -> tuple[str, ...]:
+    """按 ``lineup`` 选 4 槽 canonical 角色顺序（取前 N 即可拿到 N 人 roster）。"""
+    if lineup == NEGOTIATION_LINEUP_FIRMS_ONLY:
+        return SESSION_FIRMS_ONLY_ROLE_ORDER
+    if lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL:
+        return SESSION_SPEAKER_ROLE_ORDER
+    raise ValueError(
+        f"unknown negotiation lineup {lineup!r}; expected one of "
+        f"{sorted(SUPPORTED_NEGOTIATION_LINEUPS)}"
+    )
 
 
 class Phase(str, Enum):
@@ -113,7 +136,12 @@ def default_regulatory() -> dict[str, Any]:
     return {"required": 0, "status": "not_required", "actor": None}
 
 
-PRINCIPAL_PARTY_ROLES: frozenset[str] = frozenset({"firm_a", "firm_b"})
+# 合同主体（principal）= 所有公司角色。当 lineup 是 ``with_institutional`` 时世界中只有
+# firm_a / firm_b 两个公司，``PRINCIPAL_PARTY_ROLES & agent_names`` 自然回退为旧的两家公司语义；
+# 当 lineup 是 ``firms_only`` 时，3+ 家公司全部计入主体。
+PRINCIPAL_PARTY_ROLES: frozenset[str] = frozenset(
+    {"firm_a", "firm_b", "firm_c", "firm_d"}
+)
 
 
 @dataclass

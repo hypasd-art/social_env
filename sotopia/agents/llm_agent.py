@@ -70,6 +70,7 @@ class LLMAgent(BaseAgent[Observation, AgentAction]):
                 background=self.inbox[0][
                     1
                 ].to_natural_language(),  # Only consider the first message for now
+                agent=self.agent_name,
             )
 
         if len(obs.available_actions) == 1 and "none" in obs.available_actions:

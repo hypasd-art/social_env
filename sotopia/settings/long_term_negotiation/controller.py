@@ -63,6 +63,8 @@ class NegotiationWorldController:
         self.action_log: list[dict[str, Any]] = []
         self.session_log: list[dict[str, Any]] = []
         self.event_log: list[dict[str, Any]] = []
+        #: 面向复盘的 **全局时间线**（合同提出/接受/签署、融资与监管里程碑、世界终止等）。
+        self.execution_timeline: list[dict[str, Any]] = []
         #: §8.4 — agent -> 待发「外部事件」观察文本（下次 digest 读出后清空）。
         self._external_event_queue: dict[str, list[str]] = {}
         self.state_snapshots: list[dict[str, Any]] = []
@@ -153,6 +155,21 @@ class NegotiationWorldController:
         row.setdefault("day", self.day)
         row.setdefault("slot", self.slot)
         self.state_snapshots.append(row)
+
+    def record_execution_event(self, kind: str, message: str, **extra: Any) -> None:
+        """追加一条人类可读的全局事件（与 ``action_log`` 互补；用于导出 ``*.execution.json``）。"""
+        row: dict[str, Any] = {
+            "seq": len(self.execution_timeline) + 1,
+            "day": int(self.day),
+            "slot": int(self.slot),
+            "phase": self.phase.value,
+            "episode_atomic_turn": int(self._episode_atomic_turn),
+            "kind": kind,
+            "message": message,
+        }
+        if extra:
+            row["detail"] = dict(extra)
+        self.execution_timeline.append(row)
 
     def enqueue_external_event_notification(self, agent: str, block: str) -> None:
         """§8.4 — 将事件观察挂入队列，在后续 ``negotiation_context_addon`` 中读出。"""
@@ -548,7 +565,7 @@ class NegotiationWorldController:
         )
         budgets = (
             f"§4.3 budgets: N_s_macro={N_s}/{T_s}{k_hint} "
-            "(order: firm_a→firm_b→investor→regulator; skip agents at K_i=K_s; "
+            "(order: speaker_role_order ∩ session.participants; skip agents at K_i=K_s; "
             "one macro turn consumes for pass/invalid/none/formal/control alike).\n"
         )
         avail_f = self._available_formal_actions(viewer)
@@ -581,9 +598,9 @@ class NegotiationWorldController:
             '"regulatory_required": 0|1, "financing_required"|"financing_contingent": 0|1 (§9 显式融资附条件), '
             '"valuation": ..., "payment": ..., "closing": ..., '
             '"compliance": ..., "penalty": ...}}\n'
-            '- accept (firm_a|firm_b): '
+            '- accept (any firm in c.parties): '
             '{"negotiation_op":"formal","verb":"accept","contract_id":"optional"}\n'
-            '- reject (firm_a|firm_b): '
+            '- reject (any firm in c.parties): '
             '{"negotiation_op":"formal","verb":"reject_contract","contract_id":"optional"}\n'
             '- amend ⇒ new contract, parent superseded: '
             '{"negotiation_op":"formal","verb":"amend_contract","contract_id":"<parent>","terms":{...}}\n'
@@ -1441,7 +1458,11 @@ class NegotiationWorldController:
 
         terms["_cash_firm_a_snapshot"] = float(res.get("firm_a", {}).get("cash", 0.0))
         vis = set(sess.participants)
-        parties = set(PRINCIPAL_PARTY_ROLES)
+        # § contracts §5.2 — 合同主体 = (PRINCIPAL_PARTY_ROLES ∩ session.participants)。
+        # 双方 lineup 时退化成 {firm_a, firm_b}；3 公司 firms_only 时为 {firm_a, firm_b, firm_c}。
+        parties = set(PRINCIPAL_PARTY_ROLES) & set(sess.participants)
+        if not parties:
+            parties = set(PRINCIPAL_PARTY_ROLES) & set(self.agent_names)
         acceptances_dict = {p: None for p in sorted(parties)}
         created_at = {
             "day": self.day,
@@ -1479,6 +1500,13 @@ class NegotiationWorldController:
             valid=True,
             reason="proposed",
             extra={"contract_id": cid},
+        )
+        self.record_execution_event(
+            "contract_proposed",
+            f"合同草案已提出（contract_id={cid}，发起方={agent}）",
+            contract_id=cid,
+            agent=agent,
+            status="proposed",
         )
         self.mark_structural_progress()
 
@@ -1538,6 +1566,13 @@ class NegotiationWorldController:
             valid=True,
             reason="accept_recorded",
             extra={"contract_id": cid, "status_after": c.status},
+        )
+        self.record_execution_event(
+            "contract_accept",
+            f"主体方 {agent} 接受合同条款（contract_id={cid}，当前状态={c.status!r}）",
+            contract_id=cid,
+            agent=agent,
+            status_after=c.status,
         )
         self.mark_structural_progress()
 
@@ -1946,6 +1981,12 @@ class NegotiationWorldController:
             reason="signed_partial",
             extra={"contract_id": cid},
         )
+        self.record_execution_event(
+            "contract_sign_partial",
+            f"主体方 {agent} 完成签署（contract_id={cid}；是否全员签满视融资/监管条件）",
+            contract_id=cid,
+            agent=agent,
+        )
         self.mark_structural_progress()
         self._maybe_finalize_success(c, resources_snapshot)
 
@@ -2005,9 +2046,8 @@ class NegotiationWorldController:
         principals = sorted(PRINCIPAL_PARTY_ROLES & c.parties)
         if not principals:
             return
-        fa = c.signatures.get("firm_a", False)
-        fb = c.signatures.get("firm_b", False)
-        if not (fa and fb):
+        # 终局成功要求 ``c.parties`` 内每名 principal 都签署。
+        if not all(c.signatures.get(p, False) for p in principals):
             return
         if int(c.financing.get("required", 0)) == 1:
             if self.investor_financing_path_withdrawn:
@@ -2023,6 +2063,12 @@ class NegotiationWorldController:
                 return
         c.status = "signed"
         self._contract_append_history(c, "contract.closed_signed", "__system__", detail={})
+        self.record_execution_event(
+            "contract_fully_signed",
+            "合同已完全生效（全部主体签署且融资/监管等附条件满足），世界将以 success 终止",
+            contract_id=c.contract_id,
+            status="signed",
+        )
         self._terminate("success")
 
     def _reevaluate_success(
@@ -2109,6 +2155,12 @@ class NegotiationWorldController:
                 valid=True,
                 reason="committed",
                 extra={"contract_id": c.contract_id},
+            )
+            self.record_execution_event(
+                "financing_committed",
+                f"投资方确认融资承诺（contract_id={c.contract_id}）",
+                contract_id=c.contract_id,
+                agent=investor,
             )
             self.mark_structural_progress()
             return
@@ -2286,6 +2338,12 @@ class NegotiationWorldController:
                 reason="approved",
                 extra={"contract_id": c.contract_id},
             )
+            self.record_execution_event(
+                "regulatory_approved",
+                f"监管方批准（contract_id={c.contract_id}）",
+                contract_id=c.contract_id,
+                agent=regulator,
+            )
             self.mark_structural_progress()
             return
 
@@ -2382,6 +2440,11 @@ class NegotiationWorldController:
         """§9 — world-level 终止（幂等），并记入 ``event_log``。"""
         if self.phase == Phase.TERMINATED:
             return
+        self.record_execution_event(
+            "world_terminate",
+            f"谈判世界结束：terminal={reason!r}",
+            terminal=reason,
+        )
         self.phase = Phase.TERMINATED
         self.terminal = reason
         self.append_event_records(

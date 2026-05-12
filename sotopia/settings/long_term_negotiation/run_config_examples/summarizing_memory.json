@@ -1,0 +1,11 @@
+{
+  "negotiation_agent": "negotiation_social_llm",
+  "memory": {
+    "backend": "summarizing",
+    "summary_model": "$env",
+    "max_recent_chars": 12000,
+    "preserve_tail_lines": 6,
+    "memory_max": 40,
+    "memory_inject_lines": 8
+  }
+}

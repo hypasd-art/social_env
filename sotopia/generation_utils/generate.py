@@ -13,7 +13,12 @@ from pydantic import BaseModel, validate_call
 from rich import print
 from rich.logging import RichHandler
 
-from sotopia.database import EnvironmentProfile, RelationshipProfile, LLMEvalBaseModel
+from sotopia.database import (
+    BaseEnvironmentProfile,
+    EnvironmentProfile,
+    LLMEvalBaseModel,
+    RelationshipProfile,
+)
 from sotopia.messages import ActionType, AgentAction, ScriptBackground
 from sotopia.messages.message_classes import (
     ScriptInteraction,
@@ -71,12 +76,20 @@ async def format_bad_output(
 ) -> str:
     format_instructions = output_parser.get_format_instructions()
     template = """
-    Given the string that can not be parsed by json parser, reformat it to a string that can be parsed by json parser.
-    Original string: {ill_formed_output}
+    The previous output could not be parsed as JSON, OR it was a JSON Schema instead of an
+    actual value object. Please rewrite it as a single VALID JSON OBJECT WITH FILLED-IN
+    VALUES that conforms to the target schema (do NOT echo the schema; do NOT include
+    ``description`` / ``type`` / ``properties`` / ``$defs`` keys at any level; do NOT wrap in
+    markdown). For optional fields, supply concrete values (or empty strings / empty lists)
+    rather than schema fragments.
 
-    Format instructions: {format_instructions}
+    Original output (often the JSON schema mistakenly echoed back):
+    {ill_formed_output}
 
-    Please only generate the JSON:
+    Target schema (reference only — fill in values, do not copy this back as the answer):
+    {format_instructions}
+
+    Output the cleaned JSON value object now:
     """
 
     input_values = {
@@ -156,8 +169,23 @@ def _build_json_schema_response_format(
     # ``AgentAction`` uses ``argument: str | dict[str, Any]``; the object branch yields
     # ``anyOf`` JSON Schema entries that violate strict ``additionalProperties: false``
     # on common OpenAI-compatible gateways (liteLLM -> proxy). Disable strict here too.
+    #
+    # ``BaseEnvironmentProfile.game_metadata`` is ``dict[str, Any] | None``; Pydantic v2
+    # emits ``anyOf`` object branches without ``additionalProperties: false``, which
+    # OpenAI rejects for ``json_schema`` strict mode (seen on repair path in
+    # ``format_bad_output`` after a marginal parse failure). Disable strict for env profiles.
     use_strict = not issubclass(pydantic_class, LLMEvalBaseModel)
     if pydantic_class is AgentAction:
+        use_strict = False
+    if issubclass(pydantic_class, BaseEnvironmentProfile):
+        use_strict = False
+    # Generic opt-out: any Pydantic class that sets the class attribute
+    # ``OPENAI_DISABLE_STRICT_JSON_SCHEMA = True`` (e.g. via a ``ClassVar``) will
+    # be sent with ``strict=False``. This is the right escape hatch for models
+    # whose schema would otherwise need every property required (forbidden by
+    # strict OpenAI gateways) or whose ``anyOf``/dynamic dict branches lack
+    # ``additionalProperties: false``. Used by ``LLMNegotiationAgentDraft``.
+    if getattr(pydantic_class, "OPENAI_DISABLE_STRICT_JSON_SCHEMA", False):
         use_strict = False
 
     # 中文注释：返回 litellm/openai 期望的 response_format 结构，
@@ -330,6 +358,20 @@ async def agenerate(
     log.debug(f"Model: {model_name}")
     log.debug(f"Prompt: {messages}")
     log.info(f"Generated result{log_prefix}: {parsed_result}")
+    try:
+        from sotopia.settings.long_term_negotiation.model_trace import record_generation_step
+
+        raw_str = result if isinstance(result, str) else ("" if result is None else str(result))
+        record_generation_step(
+            step_kind="agenerate",
+            model_name=model_name,
+            messages=messages,
+            raw_content=raw_str,
+            parsed=parsed_result,
+            input_values=input_values,
+        )
+    except Exception:
+        pass
     return parsed_result
 
 
@@ -669,16 +711,22 @@ async def agenerate_goal(
     background: str,
     bad_output_process_model: str | None = None,
     use_fixed_model_version: bool = True,
+    agent: str | None = None,
 ) -> str:
     """
     Using langchain to generate the background
+
+    ``agent`` 仅用于 tracing / 元数据（写入 ``input_values``），不参与默认 goal 模板占位符。
     """
+    iv: dict[str, Any] = dict(background=background)
+    if agent:
+        iv["agent"] = agent
     return await agenerate(
         model_name=model_name,
         template="""Please generate your goal based on the background:
             {background}
             """,
-        input_values=dict(background=background),
+        input_values=iv,
         output_parser=StrOutputParser(),
         bad_output_process_model=bad_output_process_model,
         use_fixed_model_version=use_fixed_model_version,

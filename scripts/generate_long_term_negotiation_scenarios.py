@@ -3,7 +3,7 @@
 
 参考 ``sotopia/benchmark_v2_data_models.py`` 的增量模型与工厂函数：
 
-- ``AgentProfile`` → ``upgrade_agent_profile`` → ``AgentProfileV2``
+- ``AgentProfile`` → ``upgrade_agent_profile`` → ``AgentProfileV2``（**每个环境各合成一套**六角色画像并写 combo / V2 快照）
 - ``EnvironmentProfile`` → ``upgrade_environment_profile`` → ``EnvironmentProfileV2``
 - ``make_event_script_from_dict`` → ``EventScript``
 - ``Contract`` / ``SystemStateSnapshot`` / ``make_initial_state_snapshot``
@@ -14,50 +14,46 @@
 ``EnvironmentProfile.game_metadata.long_term_negotiation`` + V2 行是为 **采样题库 /
 实验管理** 准备的侧车数据，可把 ``pk`` / ``timeline`` JSON 回填到评测入口。
 
+支持的 ``--modes``：
+
+- ``bilat`` / ``tri`` / ``quartet`` —— ``with_institutional`` lineup，按
+  ``firm_a, firm_b, investor, regulator`` 顺序取 N=2/3/4。
+- ``firms3`` / ``firms4`` —— ``firms_only`` lineup（**3 家及以上公司**），按
+  ``firm_a, firm_b, firm_c, firm_d`` 顺序取 N=3/4，机构位 investor / regulator
+  不进入世界（融资 / 监管路径成为 no-op，contract 主体由 N 家公司组成）。
+
 示例::
 
     cd social_env
     SOTOPIA_STORAGE_BACKEND=local python scripts/generate_long_term_negotiation_scenarios.py --clean --tag ltr_benchmark_v1
 
-生成结束后会写入 ``~/.sotopia/data/long_term_negotiation_manifest.json``（含各场景的 ``pk`` / ``codename``）。
-用它来跑大模型批量评测（须与上文相同 **local** 后端，否则 Redis OM 与生成数据不一致）::
+    # 规模：只生成 D6/D8 时间轴，每种 (模式×预设) 重复 2 份；模式含双方 / 三方 / 四方 / 三家公司 / 四家公司
+    python scripts/generate_long_term_negotiation_scenarios.py --tag ltr_scale_v1 \\
+        --modes bilat,tri,quartet,firms3,firms4 --timeline-labels D6,D8 --replicates 2
 
-    cd social_env && SOTOPIA_STORAGE_BACKEND=local PYTHONPATH=. \\
-      python -m sotopia.cli.benchmark.negotiation_batch negotiation-batch \\
-      --scenario-manifest ~/.sotopia/data/long_term_negotiation_manifest.json \\
-      -m gpt-4o-mini -e gpt-4o-mini -r 1 -b 2 \\
-      -o runs/negotiation_from_manifest.jsonl
+    # 仅 3+ 家公司互谈（不含 investor/regulator）
+    python scripts/generate_long_term_negotiation_scenarios.py --tag ltr_firms_only \\
+        --modes firms3,firms4 --timeline-labels D6,D8 --replicates 1
 
-仅跑题库中某一个 ``EnvironmentProfile`` 时::
+    # 精确指定每种人数 / 公司数的场景条数（不再用 --modes / --replicates）：
+    # 8 条 firms3 + 12 条 firms4 + 5 条 bilat（在 D6,D8 preset 上轮转）
+    python scripts/generate_long_term_negotiation_scenarios.py --tag ltr_mix \\
+        --mode-counts firms3=8,firms4=12,bilat=5 --timeline-labels D6,D8
 
-    SOTOPIA_STORAGE_BACKEND=local PYTHONPATH=. python -m sotopia.cli.benchmark.negotiation_batch negotiation-batch \\
-      --scenario-env-pk <manifest 里 environments[].pk>
-
-用大模型起草「scenario 段落 + 各角色战略目标句」（时间与 ``NegotiationTimelineParams``
-仍按代码档位固定写入 ``game_metadata``，保证与设计/评测兼容）::
-
-    cd social_env
-    SOTOPIA_STORAGE_BACKEND=local python scripts/generate_long_term_negotiation_scenarios.py \\
-      --llm --llm-model gpt-4o-mini --tag ltr_llm_seed_v1
-
-依赖 ``social_env/.env`` 里的 ``OPENAI_API_KEY``（及可选 ``OPENAI_API_BASE``）。模型需支持
-结构化 JSON（``litellm`` 的 ``json_schema`` / ``response_format``）。``--llm`` 分支使用轻量 ``litellm.acompletion``，
-不导入整块 ``generation_utils.generate``（避免首轮导入卡住或极慢）。
+    # 要求说明（写入 manifest，便于实验记录）
+    python scripts/generate_long_term_negotiation_scenarios.py --requirements "用于论文表2；仅规则评测" --tag ltr_paper
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import os
 import shutil
 import sys
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Literal, cast
-
-from pydantic import BaseModel, Field, ValidationError
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -65,18 +61,6 @@ if str(REPO_ROOT) not in sys.path:
 
 os.environ.setdefault("SOTOPIA_STORAGE_BACKEND", "local")
 LOCAL_DATA_DIR = Path(os.path.expanduser("~/.sotopia/data"))
-
-
-def _load_repo_dotenv() -> None:
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv(REPO_ROOT / ".env", override=False)
-    except ImportError:
-        pass
-
-
-_load_repo_dotenv()
 
 from sotopia.benchmark_v2_data_models import (  # noqa: E402
     Contract,
@@ -93,14 +77,22 @@ from sotopia.database import (  # noqa: E402
 )
 from sotopia.database.persistent_profile import EnvironmentList, RelationshipType  # noqa: E402
 
-from sotopia.settings.long_term_negotiation.types import NegotiationTimelineParams  # noqa: E402
+from sotopia.settings.long_term_negotiation.types import (  # noqa: E402
+    NEGOTIATION_LINEUP_FIRMS_ONLY,
+    NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    NegotiationTimelineParams,
+    SESSION_FIRMS_ONLY_ROLE_ORDER,
+    SESSION_SPEAKER_ROLE_ORDER,
+)
 from sotopia.settings.long_term_negotiation.roles import (  # noqa: E402
     CANONICAL_NEGOTIATION_ROSTER,
+    FIRM_ROLES_ORDER,
     ROLE_SUMMARY_EN,
     default_agent_resources_bundle,
 )
 
-# Negotiation roster order used by ``default_negotiation_roster(quartet=True)``
+# 全部 6 个 canonical 角色（含 firm_c / firm_d / investor / regulator）；按字母排序便于
+# 写库 / manifest 时稳定（与 V1 quartet 时仅 4 个不冲突）。
 QUARTET_ROSTER_ORDER: tuple[str, ...] = tuple(sorted(CANONICAL_NEGOTIATION_ROSTER))
 
 
@@ -117,6 +109,101 @@ def timeline_as_metadata(params: NegotiationTimelineParams) -> dict[str, Any]:
     payload = asdict(params)
     payload["external_event_specs"] = list(payload.get("external_event_specs") or ())
     return payload
+
+
+def parse_unique_modes(s: str) -> list[str]:
+    """``--modes`` 逗号分隔，去重保序。
+
+    合法 token：
+
+    - ``bilat`` / ``tri`` / ``quartet`` —— ``with_institutional`` lineup（含机构位）。
+    - ``firms3`` / ``firms4`` —— ``firms_only`` lineup（3 / 4 家公司，无机构位）。
+    """
+    allow = frozenset({"bilat", "tri", "quartet", "firms3", "firms4"})
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in s.split(","):
+        p = part.strip().lower()
+        if p not in allow or p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+    return out or ["bilat", "quartet"]
+
+
+def parse_mode_counts(s: str) -> dict[str, int] | None:
+    """``--mode-counts MODE=N[,MODE=N...]`` 解析。
+
+    例：``firms3=8,firms4=12`` -> ``{'firms3': 8, 'firms4': 12}``，每个 mode 各生成 N 条
+    （在 ``--timeline-labels`` 选定的 preset 上轮转）；返回 ``None`` 表示走 ``--modes`` +
+    ``--replicates`` 旧路径。
+    """
+    spec = (s or "").strip()
+    if not spec:
+        return None
+    allow = frozenset({"bilat", "tri", "quartet", "firms3", "firms4"})
+    plan: dict[str, int] = {}
+    for raw in spec.split(","):
+        chunk = raw.strip()
+        if not chunk:
+            continue
+        if "=" not in chunk:
+            raise ValueError(
+                f"invalid --mode-counts segment {chunk!r}; use MODE=COUNT (e.g. firms3=8)"
+            )
+        key, val = chunk.split("=", 1)
+        mode = key.strip().lower()
+        if mode not in allow:
+            raise ValueError(
+                f"unknown mode {mode!r} in --mode-counts; allowed {sorted(allow)}"
+            )
+        try:
+            n = int(val.strip())
+        except ValueError as e:
+            raise ValueError(f"invalid count for mode {mode!r}: {val!r}") from e
+        if n < 0:
+            raise ValueError(f"--mode-counts {mode!r} must be >= 0, got {n}")
+        # 同 mode 多次出现时累加
+        plan[mode] = plan.get(mode, 0) + n
+    plan = {m: c for m, c in plan.items() if c > 0}
+    if not plan:
+        raise ValueError("--mode-counts is non-empty but expanded to zero envs")
+    return plan
+
+
+# (模式 → (lineup, num_participants)) 映射；保持 token 与脚本之外的 manifest 兼容。
+_MODE_TO_LINEUP_N: dict[str, tuple[str, int]] = {
+    "bilat": (NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, 2),
+    "tri": (NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, 3),
+    "quartet": (NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, 4),
+    "firms3": (NEGOTIATION_LINEUP_FIRMS_ONLY, 3),
+    "firms4": (NEGOTIATION_LINEUP_FIRMS_ONLY, 4),
+}
+
+
+def lineup_and_n_for_mode(mode: str) -> tuple[str, int]:
+    if mode not in _MODE_TO_LINEUP_N:
+        raise ValueError(
+            f"unknown --modes token {mode!r}; expected one of {sorted(_MODE_TO_LINEUP_N)}"
+        )
+    return _MODE_TO_LINEUP_N[mode]
+
+
+def roles_for_mode(mode: str) -> tuple[str, ...]:
+    """模式 -> roster 前缀（按 lineup 顺序取 N 个 canonical 角色）。"""
+    lineup, n = lineup_and_n_for_mode(mode)
+    if lineup == NEGOTIATION_LINEUP_FIRMS_ONLY:
+        return tuple(SESSION_FIRMS_ONLY_ROLE_ORDER[:n])
+    return tuple(SESSION_SPEAKER_ROLE_ORDER[:n])
+
+
+def filter_timeline_presets(
+    presets: list[tuple[str, NegotiationTimelineParams]],
+    labels: frozenset[str],
+) -> list[tuple[str, NegotiationTimelineParams]]:
+    if not labels:
+        return list(presets)
+    return [x for x in presets if x[0] in labels]
 
 
 def bilateral_timeline_presets() -> list[tuple[str, NegotiationTimelineParams]]:
@@ -163,286 +250,22 @@ NEGOTIATION_SCENARIO_QUARTET = (
       "approval authority — may join selected sessions contingent on formal moves."
 )
 
-_TimelineLabel = Literal["D6", "D8", "D12"]
+NEGOTIATION_SCENARIO_TRILATERAL = (
+    NEGOTIATION_SCENARIO_BODY
+    + " An external financing participant may join selected sessions contingent on formal moves."
+)
 
+NEGOTIATION_SCENARIO_FIRMS_ONLY_3 = (
+    "Three commercial parties negotiate a multi-day acquisition / consortium structure across staged "
+    "formal sessions. The third firm participates either as a joint bidder, partner-investor firm, "
+    "or co-seller; financing and regulatory paths remain off-table — all contract principals are firms."
+)
 
-class BilateralLlmRow(BaseModel):
-    """单条双边场景：与预设 ``D6/D8/D12`` 档位一一对应。"""
-
-    timeline_label: Literal["D6", "D8", "D12"]
-    scenario_body: str = Field(
-        min_length=80,
-        max_length=6000,
-        description="Multi-sentence neutral scenario briefing for simulator agents.",
-    )
-    goal_firm_a: str = Field(
-        min_length=20,
-        max_length=2000,
-        description="2–4 sentences: acquirer strategic objective (English). REQUIRED key goal_firm_a.",
-    )
-    goal_firm_b: str = Field(
-        min_length=20,
-        max_length=2000,
-        description="2–4 sentences: target strategic objective (English). REQUIRED key goal_firm_b.",
-    )
-
-
-class QuartetLlmRow(BaseModel):
-    timeline_label: Literal["D6", "D8", "D12"]
-    scenario_body: str = Field(min_length=80, max_length=6000)
-    goal_firm_a: str = Field(min_length=20, max_length=2000, description="Acquirer objectives; REQUIRED.")
-    goal_firm_b: str = Field(min_length=20, max_length=2000, description="Target objectives; REQUIRED.")
-    goal_investor: str = Field(min_length=20, max_length=2000, description="Investor objectives; REQUIRED.")
-    goal_regulator: str = Field(min_length=20, max_length=2000, description="Regulator objectives; REQUIRED.")
-
-
-class LlmNegotiationScenarioBundle(BaseModel):
-    """一次 LLM 调用返回整包；条目数须覆盖所需 ``timeline_label``（无重复）。"""
-
-    bilateral: list[BilateralLlmRow] = Field(default_factory=list)
-    quartet: list[QuartetLlmRow] = Field(default_factory=list)
-
-
-SCENARIO_LL_PROMPT_TEMPLATE = """
-You produce **English** negotiation benchmark scenario text for a multi-day social simulator.
-
-World rules (must respect in scenario_body text):
-{rules}
-
-Negotiation roster role cards (canonical ids — do NOT rename agents in goals; refer by role meaning only):
-{role_cards}
-
-Timeline slots you MUST cover exactly once each in ``bilateral`` (length 3) with labels D6, D8, D12:
-longer horizons imply heavier scheduling load and more session rounds in-universe;
- mention calendar days, capacity per day, mix of natural language and structured JSON negotiation actions.
-
-If ``quartet`` is required (non-empty list of length 3), same three labels; scenario_body should note investor + regulator
- may join sessions per design; four goal_* fields per row.
-
-CRITICAL JSON shape — every bilateral array element MUST be an object with EXACTLY these keys (do not omit, do not rename, do not nest):
-timeline_label, scenario_body, goal_firm_a, goal_firm_b.
-
-Every quartet array element MUST include EXACTLY:
-timeline_label, scenario_body, goal_firm_a, goal_firm_b, goal_investor, goal_regulator.
-
-Put strategic instructions only in goal_* strings; scenario_body describes the situational briefing only.
-
-Output JSON matching the provided schema. No markdown fences. Keep scenario_body self-contained (one paragraph or two short paragraphs per row).
-"""
-
-
-def _simulator_rules_block() -> str:
-    return (
-        "- Two-party (firm_a acquirer, firm_b target) baseline; quartet adds investor + regulator institutions.\n"
-        "- Scheduling is constrained by calendar days D and slots per day; formal contract moves use structured actions.\n"
-        "- Stakes: staged M&A-style commercial negotiation; lawful behavior; no real firm names.\n"
-        "- Scenario is read by LLM agents: clear constraints beat literary flourish."
-    )
-
-
-def _strategy_goal_line(role: str, gist: str) -> str:
-    hint = ROLE_SUMMARY_EN.get(role, role)
-    return f"<strategy_hint>{hint}</strategy_hint> {gist.strip()}"
-
-
-def _sanitized_schema_name(name: str) -> str:
-    """与 ``generation_utils.generate._sanitize_schema_name`` 等价的最小拷贝（避免整套 generate 导入）。"""
-    return "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in name)
-
-
-def _scenario_bundle_response_format() -> dict[str, Any]:
-    schema = LlmNegotiationScenarioBundle.model_json_schema()
-    title = str(schema.get("title", LlmNegotiationScenarioBundle.__name__))
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": _sanitized_schema_name(title),
-            "schema": schema,
-            #: True 可减少模型漏字段（与 Chat Completions json_schema strict 对齐；若网关报错再改 False）。
-            "strict": True,
-        },
-    }
-
-
-def _scenario_bundle_from_raw_content(raw: str) -> LlmNegotiationScenarioBundle:
-    """先标准 JSON parse，失败后尝试 ``json-repair``（仓库已有依赖）。"""
-    s = str(raw).strip()
-    last: BaseException | None = None
-    try:
-        return LlmNegotiationScenarioBundle.model_validate_json(s)
-    except (ValidationError, json.JSONDecodeError, ValueError) as e:
-        last = e
-    try:
-        import json_repair as json_repair  # type: ignore[import-untyped]
-
-        obj = json_repair.loads(s)
-        return LlmNegotiationScenarioBundle.model_validate(obj)
-    except Exception as e:
-        last = e
-    raise ValueError("cannot parse LLM scenario bundle as expected JSON/schema") from last
-
-
-async def fetch_llm_scenario_bundle(
-    *,
-    model: str,
-    temperature: float,
-    need_bilateral: bool,
-    need_quartet: bool,
-) -> LlmNegotiationScenarioBundle:
-    """仅用 ``litellm.acompletion`` + Pydantic schema，避免 ``import generate`` 拉满 gin/redis 等大型依赖栈。"""
-    from litellm import acompletion
-    from litellm.litellm_core_utils.get_supported_openai_params import get_supported_openai_params
-    from litellm.utils import supports_response_schema
-
-    if not need_bilateral and not need_quartet:
-        return LlmNegotiationScenarioBundle(bilateral=[], quartet=[])
-
-    role_cards = json.dumps(ROLE_SUMMARY_EN, ensure_ascii=False, indent=2)
-    rules = _simulator_rules_block()
-    user_block = SCENARIO_LL_PROMPT_TEMPLATE.format(rules=rules, role_cards=role_cards).strip()
-
-    bilateral_instr = (
-        'Return **bilateral**: exactly THREE items with timeline_label covering "D6","D8","D12" once each.'
-        if need_bilateral
-        else "Return **bilateral**: an empty JSON array []."
-    )
-    quartet_instr = (
-        'Return **quartet**: exactly THREE items with timeline_label covering "D6","D8","D12" once each.'
-        if need_quartet
-        else "Return **quartet**: an empty JSON array []."
-    )
-
-    tpl = """
-{embedded}
-
-{bilateral_instr}
-{quartet_instr}
-
-{format_instructions}
-"""
-
-    tpl_core = (
-        tpl.replace("{embedded}", user_block)
-        .replace("{bilateral_instr}", bilateral_instr)
-        .replace("{quartet_instr}", quartet_instr)
-        .replace("{format_instructions}", "")
-        .strip()
-        + "\n\nRespond with a single JSON object only (no markdown); it must match the response json_schema.\n"
-    )
-
-    model_name_effective = model
-    base_url: str | None = None
-    api_key: str | None = None
-    if model_name_effective.startswith("custom"):
-        first, rest = model_name_effective.split("@", 1)
-        model_name_effective = first.replace("custom/", "openai/")
-        base_url = rest
-        api_key = os.environ.get("CUSTOM_API_KEY", "EMPTY")
-
-    if base_url is None:
-        supported = get_supported_openai_params(model=model_name_effective)
-        assert supported is not None
-        if "response_format" not in supported:
-            raise RuntimeError(
-                f"模型 {model_name_effective!r} 的 OpenAI 兼容参数中不支持 response_format，无法做结构化场景生成。",
-            )
-        if not supports_response_schema(model=model_name_effective):
-            raise RuntimeError(
-                f"模型 {model_name_effective!r} 不支持 response_schema / json_schema 模式。",
-            )
-
-    relax_schema_strict: list[bool] = [False]
-
-    def _completion_kwargs(extra_user_prefix: str) -> dict[str, Any]:
-        user_content = extra_user_prefix + tpl_core if extra_user_prefix else tpl_core
-        rf = _scenario_bundle_response_format()
-        if relax_schema_strict[0]:
-            rf = json.loads(json.dumps(rf))
-            rf["json_schema"]["strict"] = False
-        kw: dict[str, Any] = {
-            "model": model_name_effective,
-            "messages": [{"role": "user", "content": user_content}],
-            "response_format": rf,
-            "drop_params": True,
-            "base_url": base_url,
-            "api_key": api_key,
-        }
-        if temperature is not None:
-            kw["temperature"] = temperature
-        return kw
-
-    retries = 3
-    last_err: BaseException | None = None
-
-    bundle: LlmNegotiationScenarioBundle | None = None
-
-    for attempt in range(retries):
-        prefix = ""
-        if attempt > 0:
-            prefix = (
-                "Your prior JSON omitted required keys (goal_firm_a, goal_firm_b, etc.). "
-                "Every bilateral item MUST contain all keys: timeline_label, scenario_body, goal_firm_a, goal_firm_b. "
-                "Every quartet item MUST also include goal_investor, goal_regulator. "
-                "No shorter field names.\n\n"
-            )
-        try:
-            response = await acompletion(**_completion_kwargs(prefix))
-        except Exception as exc:
-            # 某些自建网关不支持 strict json_schema：降级为 strict=false 再打一次同一请求。
-            if not relax_schema_strict[0] and (
-                "json_schema" in str(exc).lower()
-                or "response_format" in str(exc).lower()
-                or "structured" in str(exc).lower()
-            ):
-                relax_schema_strict[0] = True
-                response = await acompletion(**_completion_kwargs(prefix))
-            else:
-                raise
-        raw = response.choices[0].message.content
-        if not raw or not str(raw).strip():
-            last_err = ValueError("LLM returned empty content for scenario bundle")
-            continue
-        try:
-            bundle = _scenario_bundle_from_raw_content(str(raw))
-        except Exception as parse_exc:
-            last_err = parse_exc
-            continue
-
-        expected = {"D6", "D8", "D12"}
-        try:
-            if need_bilateral:
-                bil_labels = [r.timeline_label for r in bundle.bilateral]
-                if set(bil_labels) != expected or len(bundle.bilateral) != 3:
-                    raise ValueError(
-                        f"LLM bilateral rows must cover D6/D8/D12 exactly once each; got {bil_labels}",
-                    )
-            elif bundle.bilateral:
-                raise ValueError("unexpected non-empty bilateral from LLM when modes excluded bilat")
-
-            if need_quartet:
-                quad_labels = [r.timeline_label for r in bundle.quartet]
-                if set(quad_labels) != expected or len(bundle.quartet) != 3:
-                    raise ValueError(
-                        f"LLM quartet rows must cover D6/D8/D12 exactly once each; got {quad_labels}",
-                    )
-            elif bundle.quartet:
-                raise ValueError("unexpected non-empty quartet from LLM when modes excluded quartet")
-        except ValueError as ve:
-            last_err = ve
-            continue
-
-        return bundle
-
-    assert last_err is not None
-    raise RuntimeError(f"LLM scenario bundle invalid after {retries} attempts") from last_err
-
-
-def _index_bilateral(rows: list[BilateralLlmRow]) -> dict[_TimelineLabel, BilateralLlmRow]:
-    return {cast(_TimelineLabel, r.timeline_label): r for r in rows}
-
-
-def _index_quartet(rows: list[QuartetLlmRow]) -> dict[_TimelineLabel, QuartetLlmRow]:
-    return {cast(_TimelineLabel, r.timeline_label): r for r in rows}
+NEGOTIATION_SCENARIO_FIRMS_ONLY_4 = (
+    "Four commercial parties negotiate a multi-day acquisition / consortium structure across staged "
+    "formal sessions. The third and fourth firms enter as additional bidders or consortium members; "
+    "financing and regulatory paths remain off-table — all contract principals are firms."
+)
 
 
 def save_negotiation_agents(*, tag: str) -> dict[str, AgentProfile]:
@@ -499,39 +322,77 @@ def build_environment_profile_legacy(
     quartet: bool,
     params: NegotiationTimelineParams,
     tag: str,
-    scenario_text_override: str | None = None,
-    agent_goals_override: list[str] | None = None,
+    num_participants: int | None = None,
+    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
 ) -> EnvironmentProfile:
-    timeline_meta = timeline_as_metadata(params)
-    if scenario_text_override is not None and scenario_text_override.strip():
-        body = scenario_text_override.strip()
-    else:
-        body = NEGOTIATION_SCENARIO_QUARTET if quartet else NEGOTIATION_SCENARIO_BODY
+    """``lineup`` + ``num_participants`` 共同决定 roster 与场景文案。
 
-    if agent_goals_override is not None:
-        goals = list(agent_goals_override)
-    elif quartet:
-        goals = [
-            f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Secure financing & approvals.",
-            f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Maximize lawful consideration.",
-            f"<strategy_hint>{ROLE_SUMMARY_EN['investor']}</strategy_hint> Structure contingent capital.",
-            f"<strategy_hint>{ROLE_SUMMARY_EN['regulator']}</strategy_hint> Enforce procedural thresholds.",
-        ]
+    - ``with_institutional``：N=2 (firm_a/firm_b)，N=3 (+investor)，N=4 (+regulator)。
+    - ``firms_only``：N=3 (firm_a/firm_b/firm_c)，N=4 (+firm_d)；不含机构位。
+    """
+    n = num_participants if num_participants is not None else (4 if quartet else 2)
+    if n < 2 or n > 4:
+        raise ValueError(f"num_participants must be 2..4, got {n}")
+    gm_quartet = False
+    if lineup == NEGOTIATION_LINEUP_FIRMS_ONLY:
+        if n < 2:
+            raise ValueError("firms_only lineup requires num_participants>=2")
+        if n == 2:
+            body = NEGOTIATION_SCENARIO_BODY
+            goals = [
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Close deal under cash limits.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Negotiate staged consideration.",
+            ]
+        elif n == 3:
+            body = NEGOTIATION_SCENARIO_FIRMS_ONLY_3
+            goals = [
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Lead acquirer; align consortium economics.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Target / co-seller; protect downside.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_c']}</strategy_hint> Joint bidder / partner firm; carve scope.",
+            ]
+        else:
+            body = NEGOTIATION_SCENARIO_FIRMS_ONLY_4
+            goals = [
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Lead acquirer; coordinate consortium.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Target firm; preserve optionality.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_c']}</strategy_hint> Co-bidder; structure tranches.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_d']}</strategy_hint> Late-entrant bidder; trade speed for clarity.",
+            ]
     else:
-        goals = [
-            f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Close deal under cash/financing limits.",
-            f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Negotiate staged consideration.",
-        ]
-    gm: dict[str, Any] = {
-        "pipeline": "long_term_negotiation",
-        "strict_design_v1": quartet,
-        "quartet": quartet,
-        "timeline": timeline_meta,
-        "design_doc": "social_env/design_1.md",
-        "codename": codename,
-    }
-    if scenario_text_override is not None and scenario_text_override.strip():
-        gm["scenario_provenance"] = "llm_structured_bundle_v1"
+        if n == 2:
+            body = NEGOTIATION_SCENARIO_BODY
+            goals = [
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Close deal under cash/financing limits.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Negotiate staged consideration.",
+            ]
+        elif n == 3:
+            body = NEGOTIATION_SCENARIO_TRILATERAL
+            goals = [
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Secure financing & approvals.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Maximize lawful consideration.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['investor']}</strategy_hint> Structure contingent capital.",
+            ]
+        else:
+            body = NEGOTIATION_SCENARIO_QUARTET
+            goals = [
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_a']}</strategy_hint> Secure financing & approvals.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['firm_b']}</strategy_hint> Maximize lawful consideration.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['investor']}</strategy_hint> Structure contingent capital.",
+                f"<strategy_hint>{ROLE_SUMMARY_EN['regulator']}</strategy_hint> Enforce procedural thresholds.",
+            ]
+            gm_quartet = True
+    from sotopia.settings.long_term_negotiation.scenario_loader import (
+        build_negotiation_game_metadata_bundle,
+    )
+
+    gm_base = build_negotiation_game_metadata_bundle(
+        codename,
+        gm_quartet,
+        params,
+        num_participants=n,
+        lineup=lineup,
+        scenario_text=body,
+    )
     return EnvironmentProfile(
         codename=codename,
         source="benchmark_v2_synthetic_long_term_negotiation",
@@ -539,7 +400,7 @@ def build_environment_profile_legacy(
         agent_goals=goals,
         relationship=RelationshipType.stranger,
         tag=tag,
-        game_metadata=gm,
+        game_metadata=gm_base,
     )
 
 
@@ -619,9 +480,23 @@ def persist_scenario_v2(
     tag: str,
     event_anchor_pk: str | None,
     v2_by_role: dict[str, Any],
+    num_participants: int | None = None,
+    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
 ) -> tuple[Any, Contract | None, Any]:
-    """落库单个场景的 ``EnvironmentProfileV2``、``SystemStateSnapshot``、可选 ``Contract``。"""
-    n_agents = 4 if quartet else 2
+    """落库单个场景的 ``EnvironmentProfileV2``、``SystemStateSnapshot``、可选 ``Contract``。
+
+    ``lineup`` 决定 N 名 canonical 角色顺序：``with_institutional`` → ``SESSION_SPEAKER_ROLE_ORDER``；
+    ``firms_only`` → ``SESSION_FIRMS_ONLY_ROLE_ORDER``（公司自相谈，无机构位）。
+    """
+    n_agents = num_participants if num_participants is not None else (4 if quartet else 2)
+    if n_agents < 2 or n_agents > 4:
+        raise ValueError(f"num_participants must be 2..4, got {n_agents}")
+    role_order = (
+        SESSION_FIRMS_ONLY_ROLE_ORDER
+        if lineup == NEGOTIATION_LINEUP_FIRMS_ONLY
+        else SESSION_SPEAKER_ROLE_ORDER
+    )
+    roles = tuple(role_order[:n_agents])
     bundle = default_agent_resources_bundle()
     timeline_meta = timeline_as_metadata(params)
 
@@ -644,8 +519,6 @@ def persist_scenario_v2(
     v2_env.tag = tag
     v2_env.save()
 
-    roles: tuple[str, ...] = QUARTET_ROSTER_ORDER if quartet else ("firm_a", "firm_b")
-
     pks = [v2_by_role[r].pk for r in roles]
 
     ms = md_init["market_state"]
@@ -662,7 +535,7 @@ def persist_scenario_v2(
     snap.save()
 
     contract: Contract | None = None
-    if quartet and len(pks) >= 3:
+    if len(pks) >= 3:
         contract = Contract(
             episode_pk="",
             proposer_pk=str(pks[0]),
@@ -705,22 +578,37 @@ def main() -> int:
     ap.add_argument(
         "--modes",
         default="bilat,quartet",
-        help="comma separated: bilat, quartet (default both)",
-    )
-    ap.add_argument(
-        "--llm",
-        action="store_true",
         help=(
-            "使用大模型（结构化输出）起草各档位的 scenario 段落与战略目标句；时间表仍由脚本固定。"
-            "需 OPENAI_API_KEY / 可用的 LiteLLM 模型（默认同 long_term_negotiation_llm_eval_demo）。"
+            "逗号分隔、去重保序：bilat（2 人，with_institutional）/ tri（3 人，含 investor）/ "
+            "quartet（4 人，含 investor + regulator）/ firms3（3 家公司，无机构位）/ "
+            "firms4（4 家公司，无机构位）"
         ),
     )
     ap.add_argument(
-        "--llm-model",
+        "--timeline-labels",
         default="",
-        help="LightLLM 模型名（空则依次为 Env NEGOTIATION_SCENARIO_GEN_MODEL、NEGOTIATION_AGENT_MODEL、gpt-4o-mini）",
+        help="逗号分隔，仅保留这些时间轴预设标签（如 D6,D8,D12）；空表示全部",
     )
-    ap.add_argument("--llm-temperature", type=float, default=0.65)
+    ap.add_argument(
+        "--replicates",
+        type=int,
+        default=1,
+        help="每种 (模式 × 时间轴预设) 重复写入的份数，用于扩大题库规模（>=1）",
+    )
+    ap.add_argument(
+        "--mode-counts",
+        default="",
+        help=(
+            "按模式精确指定生成条数：MODE=N[,MODE=N...]；例 firms3=8,firms4=12,bilat=5。"
+            "传入后忽略 --modes 与 --replicates，每个 mode 在 --timeline-labels 选定的 preset 上"
+            "轮转生成 N 条。合法 MODE：bilat/tri/quartet/firms3/firms4。"
+        ),
+    )
+    ap.add_argument(
+        "--requirements",
+        default="",
+        help="自由文本，写入 manifest 的 generation_spec.requirements_notes（实验要求/筛选标准等）",
+    )
     args = ap.parse_args()
 
     print(f"[backend] SOTOPIA_STORAGE_BACKEND={os.environ['SOTOPIA_STORAGE_BACKEND']}")
@@ -728,38 +616,38 @@ def main() -> int:
 
     wipe_local_data(yes=args.clean)
 
-    modes = {m.strip() for m in args.modes.split(",") if m.strip()}
-    if not modes.intersection({"bilat", "quartet"}):
-        modes = {"bilat", "quartet"}
-
-    need_bi = "bilat" in modes
-    need_q = "quartet" in modes
-    llm_ix_bil: dict[_TimelineLabel, BilateralLlmRow] = {}
-    llm_ix_quad: dict[_TimelineLabel, QuartetLlmRow] = {}
-    if args.llm:
-        model_n = (
-            args.llm_model.strip()
-            or os.getenv("NEGOTIATION_SCENARIO_GEN_MODEL", "").strip()
-            or os.getenv("NEGOTIATION_AGENT_MODEL", "").strip()
-            or "gpt-4o-mini"
+    explicit_counts = parse_mode_counts(args.mode_counts)
+    if explicit_counts is not None:
+        modes_sel = list(explicit_counts.keys())
+    else:
+        modes_sel = parse_unique_modes(args.modes)
+    presets_all = bilateral_timeline_presets()
+    label_filter = frozenset(
+        x.strip() for x in args.timeline_labels.split(",") if x.strip()
+    )
+    presets_use = filter_timeline_presets(presets_all, label_filter)
+    if label_filter:
+        unknown = sorted(label_filter - {x[0] for x in presets_all})
+        if unknown:
+            print(f"[warn] unknown --timeline-labels (ignored): {unknown}")
+    if not presets_use:
+        print("[err] no timeline presets left after --timeline-labels filter")
+        return 1
+    replicates = max(1, int(args.replicates))
+    if explicit_counts is not None:
+        total_envs = sum(explicit_counts.values())
+        breakdown = ", ".join(f"{m}={explicit_counts[m]}" for m in modes_sel)
+        print(
+            f"[plan] --mode-counts active: {breakdown} | "
+            f"preset_labels={[p[0] for p in presets_use]} -> environments={total_envs} "
+            f"(--replicates {replicates} ignored)"
         )
-        print(f"[llm] generating scenario stubs model={model_n} T={args.llm_temperature} bilat={need_bi} quartet={need_q}")
-        bundle = asyncio.run(
-            fetch_llm_scenario_bundle(
-                model=model_n,
-                temperature=args.llm_temperature,
-                need_bilateral=need_bi,
-                need_quartet=need_q,
-            ),
+    else:
+        approx_envs = len(modes_sel) * len(presets_use) * replicates
+        print(
+            f"[plan] modes={modes_sel} preset_labels={[p[0] for p in presets_use]} "
+            f"replicates={replicates} -> environments≈{approx_envs}"
         )
-        if need_bi:
-            llm_ix_bil = _index_bilateral(bundle.bilateral)
-        if need_q:
-            llm_ix_quad = _index_quartet(bundle.quartet)
-
-    agents = save_negotiation_agents(tag=args.tag)
-    pairwise_strangers(agents, tag=args.tag)
-    v2_agents = save_negotiation_agent_profiles_v2(agents, tag=args.tag)
 
     events = negotiation_event_scripts(args.tag)
     for ev in events:
@@ -767,92 +655,103 @@ def main() -> int:
     anchor_pk = events[0].pk if events else None
     print(f"[save] EventScript x {len(events)} anchor_pk={anchor_pk}")
 
-    presets = bilateral_timeline_presets()
-
     combos_by_codename: dict[str, EnvAgentComboStorage] = {}
     legacy_env_objs: list[EnvironmentProfile] = []
+    env_modes_by_codename: dict[str, str] = {}
+    env_lineup_by_codename: dict[str, str] = {}
+    env_agent_pks_by_codename: dict[str, dict[str, str]] = {}
+    env_agent_v2_pks_by_codename: dict[str, dict[str, str]] = {}
+
+    _MODE_PREFIX = {
+        "bilat": "bil",
+        "tri": "tri",
+        "quartet": "quad",
+        "firms3": "firms3",
+        "firms4": "firms4",
+    }
 
     variant_i = 0
-    if "bilat" in modes:
-        for label, params in presets:
-            codename = f"ltr_neg_bil_{label}_v{variant_i}"
-            variant_i += 1
-            tl = cast(_TimelineLabel, label)
-            br = llm_ix_bil.get(tl) if llm_ix_bil else None
-            scen_ov = br.scenario_body if br else None
-            goals_ov = (
-                [_strategy_goal_line("firm_a", br.goal_firm_a), _strategy_goal_line("firm_b", br.goal_firm_b)]
-                if br
-                else None
-            )
-            legacy = build_environment_profile_legacy(
-                codename=codename,
-                quartet=False,
-                params=params,
-                tag=args.tag,
-                scenario_text_override=scen_ov,
-                agent_goals_override=goals_ov,
-            )
-            legacy.save()
-            combo = save_combo(legacy, ("firm_a", "firm_b"), agents)
-            combos_by_codename[codename] = combo
-            legacy_env_objs.append(legacy)
-            persist_scenario_v2(
-                legacy,
-                quartet=False,
-                params=params,
-                tag=args.tag,
-                event_anchor_pk=anchor_pk,
-                v2_by_role=v2_agents,
-            )
+    for mode in modes_sel:
+        lineup, n_agents = lineup_and_n_for_mode(mode)
+        roles = roles_for_mode(mode)
+        prefix = _MODE_PREFIX.get(mode, mode)
 
-    if "quartet" in modes:
-        for label, params in presets:
-            codename = f"ltr_neg_quad_{label}_v{variant_i}"
+        if explicit_counts is not None:
+            # 每个 mode 生成 explicit_counts[mode] 条，逐条在 presets_use 上轮转。
+            jobs = [
+                (i, *presets_use[i % len(presets_use)])
+                for i in range(explicit_counts[mode])
+            ]
+        else:
+            jobs = [
+                (rep * len(presets_use) + j, label, params)
+                for rep in range(replicates)
+                for j, (label, params) in enumerate(presets_use)
+            ]
+
+        for slot, label, params in jobs:
+            codename = f"ltr_neg_{prefix}_{label}_v{variant_i}_r{slot}"
             variant_i += 1
-            tl = cast(_TimelineLabel, label)
-            qr = llm_ix_quad.get(tl) if llm_ix_quad else None
-            scen_ov = qr.scenario_body if qr else None
-            goals_ov = (
-                [
-                    _strategy_goal_line("firm_a", qr.goal_firm_a),
-                    _strategy_goal_line("firm_b", qr.goal_firm_b),
-                    _strategy_goal_line("investor", qr.goal_investor),
-                    _strategy_goal_line("regulator", qr.goal_regulator),
-                ]
-                if qr
-                else None
-            )
             legacy = build_environment_profile_legacy(
                 codename=codename,
-                quartet=True,
+                quartet=(lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and n_agents == 4),
                 params=params,
                 tag=args.tag,
-                scenario_text_override=scen_ov,
-                agent_goals_override=goals_ov,
+                num_participants=n_agents,
+                lineup=lineup,
             )
             legacy.save()
-            combo = save_combo(legacy, QUARTET_ROSTER_ORDER, agents)
+            agent_bind_tag = f"{args.tag}__{codename}"
+            agents = save_negotiation_agents(tag=agent_bind_tag)
+            pairwise_strangers(agents, tag=agent_bind_tag)
+            v2_agents = save_negotiation_agent_profiles_v2(agents, tag=agent_bind_tag)
+            combo = save_combo(legacy, roles, agents)
             combos_by_codename[codename] = combo
             legacy_env_objs.append(legacy)
+            env_modes_by_codename[codename] = mode
+            env_lineup_by_codename[codename] = lineup
+            env_agent_pks_by_codename[codename] = {r: agents[r].pk for r in QUARTET_ROSTER_ORDER}
+            env_agent_v2_pks_by_codename[codename] = {r: v2_agents[r].pk for r in QUARTET_ROSTER_ORDER}
             persist_scenario_v2(
                 legacy,
-                quartet=True,
+                quartet=(lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and n_agents == 4),
                 params=params,
                 tag=args.tag,
                 event_anchor_pk=anchor_pk,
                 v2_by_role=v2_agents,
+                num_participants=n_agents,
+                lineup=lineup,
             )
 
     save_environment_list_for_combos(legacy_env_objs, combos_by_codename)
 
     manifest = {
         "tag": args.tag,
-        "llm_scenario_authoring": bool(args.llm),
+        "source": "generate_long_term_negotiation_scenarios.py",
         "agent_roles": QUARTET_ROSTER_ORDER,
-        "agent_profile_pks_by_role": {r: agents[r].pk for r in QUARTET_ROSTER_ORDER},
-        "agent_profile_v2_pks_by_role": {r: v2_agents[r].pk for r in QUARTET_ROSTER_ORDER},
-        "environments": [{"codename": e.codename, "pk": e.pk} for e in legacy_env_objs],
+        "agent_profiles_binding": "per_environment",
+        "environments": [
+            {
+                "codename": e.codename,
+                "pk": e.pk,
+                "mode": env_modes_by_codename.get(e.codename),
+                "lineup": env_lineup_by_codename.get(e.codename),
+                "agent_profile_pks_by_role": env_agent_pks_by_codename.get(e.codename, {}),
+                "agent_profile_v2_pks_by_role": env_agent_v2_pks_by_codename.get(e.codename, {}),
+            }
+            for e in legacy_env_objs
+        ],
+        "generation_spec": {
+            "modes": list(modes_sel),
+            "timeline_labels_filter": sorted(label_filter) if label_filter else None,
+            "presets_used": [p[0] for p in presets_use],
+            "replicates": (None if explicit_counts is not None else replicates),
+            "mode_counts_spec": (args.mode_counts.strip() or None),
+            "mode_counts_resolved": explicit_counts,
+            "environment_count": len(legacy_env_objs),
+            "requirements_notes": (args.requirements.strip() or None),
+            "agent_profiles_binding": "per_environment",
+        },
     }
     manifest_path = LOCAL_DATA_DIR / "long_term_negotiation_manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)

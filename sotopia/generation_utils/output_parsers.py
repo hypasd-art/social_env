@@ -26,6 +26,32 @@ class OutputParser(LLMBaseModel, Generic[OutputType]):
         raise NotImplementedError
 
 
+_SCHEMA_VALUE_KEYS: frozenset[str] = frozenset(
+    {"type", "description", "title", "default", "$ref", "anyOf", "items", "properties"}
+)
+
+
+def _looks_like_schema_echo(obj: Any) -> bool:
+    """启发式检测：LLM 把 JSON Schema 当 value 回写。
+
+    现象 1（root-level）：``{"properties": {...}, "required": [...], "type": "object"}``
+    现象 2（properties-only）：``{"first_name": {"type": "string", ...}, ...}`` —— 每个
+    value 是 schema 片段（带 ``type`` / ``description`` / ``$ref`` / ``anyOf`` 等）。
+
+    返回 ``True`` 时调用方应抛错，让 ``format_bad_output`` 用更短的 fix-prompt 重写。
+    """
+    if not isinstance(obj, dict) or not obj:
+        return False
+    if obj.keys() & {"properties", "$defs", "$ref"} and obj.get("type") == "object":
+        return True
+    schema_like = 0
+    for v in obj.values():
+        if isinstance(v, dict) and v.keys() & _SCHEMA_VALUE_KEYS:
+            schema_like += 1
+    # 至少 60% 的 value 像 schema 片段才认定是回写（避免误伤真有 ``type``/``description`` 字段的合法 payload）。
+    return schema_like >= max(2, int(0.6 * len(obj)))
+
+
 class PydanticOutputParser(OutputParser[T], Generic[T]):
     pydantic_object: Type[T]
 
@@ -49,6 +75,15 @@ class PydanticOutputParser(OutputParser[T], Generic[T]):
             return obj
 
         json_result = extract_value(json_result)
+
+        # Schema-echo guard：若 LLM 把 JSON Schema 当 value 回写，``model_validate_json`` 会抛
+        # 一长串 ``string_type`` / ``int_type`` 错误。提前抛 ValueError 让 ``format_bad_output``
+        # 接力做 repair（fix-prompt 通常更短，对小模型友好）。
+        if _looks_like_schema_echo(json_result):
+            raise ValueError(
+                f"LLM returned a JSON schema instead of values for "
+                f"{self.pydantic_object.__name__}; will trigger format_bad_output repair."
+            )
         if isinstance(json_result, dict) and "properties" in json_result:
             return self.pydantic_object.model_validate_json(
                 json.dumps(json_result["properties"])

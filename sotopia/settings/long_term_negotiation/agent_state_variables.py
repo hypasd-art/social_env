@@ -65,6 +65,32 @@ class FirmBStateVariables:
 
 
 @dataclass
+class FirmCStateVariables:
+    """§10 扩展 ``firm_c`` —— 第三家公司（联合投标 / 共同卖方 / 战略合作方）。"""
+
+    utility_spec: str | dict[str, Any] | None = None
+    threshold: float | None = None
+    expected_acquisition_value: float | None = None
+    asset_value: float | None = None
+    reputation_anchor: float | None = None
+    private_information: dict[str, Any] = field(default_factory=dict)
+    memory: NegotiationAgentMemoryVariables | None = None
+
+
+@dataclass
+class FirmDStateVariables:
+    """§10 扩展 ``firm_d`` —— 第四家公司（联合体成员 / 备选投标人）。"""
+
+    utility_spec: str | dict[str, Any] | None = None
+    threshold: float | None = None
+    expected_acquisition_value: float | None = None
+    asset_value: float | None = None
+    reputation_anchor: float | None = None
+    private_information: dict[str, Any] = field(default_factory=dict)
+    memory: NegotiationAgentMemoryVariables | None = None
+
+
+@dataclass
 class InvestorStateVariables:
     """§10.3 ``investor``。"""
 
@@ -92,6 +118,8 @@ class RegulatorStateVariables:
 NegotiationPsychState = Union[
     FirmAStateVariables,
     FirmBStateVariables,
+    FirmCStateVariables,
+    FirmDStateVariables,
     InvestorStateVariables,
     RegulatorStateVariables,
 ]
@@ -102,6 +130,10 @@ def _psych_role_label(st: NegotiationPsychState) -> str:
         return "firm_a"
     if isinstance(st, FirmBStateVariables):
         return "firm_b"
+    if isinstance(st, FirmCStateVariables):
+        return "firm_c"
+    if isinstance(st, FirmDStateVariables):
+        return "firm_d"
     if isinstance(st, InvestorStateVariables):
         return "investor"
     if isinstance(st, RegulatorStateVariables):
@@ -153,6 +185,34 @@ def firm_b_state_from_dict(raw: Mapping[str, Any] | None) -> FirmBStateVariables
     )
 
 
+def firm_c_state_from_dict(raw: Mapping[str, Any] | None) -> FirmCStateVariables:
+    raw = dict(raw or {})
+    raw.pop("role", None)
+    return FirmCStateVariables(
+        utility_spec=raw.get("utility_spec"),
+        threshold=raw.get("threshold"),
+        expected_acquisition_value=raw.get("expected_acquisition_value"),
+        asset_value=raw.get("asset_value"),
+        reputation_anchor=raw.get("reputation_anchor"),
+        private_information=_pinfo(raw),
+        memory=_memory_from_blob(raw.get("memory")),
+    )
+
+
+def firm_d_state_from_dict(raw: Mapping[str, Any] | None) -> FirmDStateVariables:
+    raw = dict(raw or {})
+    raw.pop("role", None)
+    return FirmDStateVariables(
+        utility_spec=raw.get("utility_spec"),
+        threshold=raw.get("threshold"),
+        expected_acquisition_value=raw.get("expected_acquisition_value"),
+        asset_value=raw.get("asset_value"),
+        reputation_anchor=raw.get("reputation_anchor"),
+        private_information=_pinfo(raw),
+        memory=_memory_from_blob(raw.get("memory")),
+    )
+
+
 def investor_state_from_dict(raw: Mapping[str, Any] | None) -> InvestorStateVariables:
     raw = dict(raw or {})
     raw.pop("role", None)
@@ -183,6 +243,8 @@ def regulator_state_from_dict(raw: Mapping[str, Any] | None) -> RegulatorStateVa
 _PSYCH_BUILDERS: dict[str, Any] = {
     "firm_a": firm_a_state_from_dict,
     "firm_b": firm_b_state_from_dict,
+    "firm_c": firm_c_state_from_dict,
+    "firm_d": firm_d_state_from_dict,
     "investor": investor_state_from_dict,
     "regulator": regulator_state_from_dict,
 }
@@ -265,6 +327,8 @@ def psych_state_to_prompt_addon(
 __all__ = [
     "FirmAStateVariables",
     "FirmBStateVariables",
+    "FirmCStateVariables",
+    "FirmDStateVariables",
     "InvestorStateVariables",
     "NegotiationAgentMemoryVariables",
     "NegotiationPsychState",
@@ -272,6 +336,8 @@ __all__ = [
     "RegulatorStateVariables",
     "firm_a_state_from_dict",
     "firm_b_state_from_dict",
+    "firm_c_state_from_dict",
+    "firm_d_state_from_dict",
     "investor_state_from_dict",
     "negotiation_psych_state_from_role",
     "psych_bundle_from_agent_dicts",

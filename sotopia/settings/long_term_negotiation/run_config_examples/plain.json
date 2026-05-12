@@ -1,0 +1,6 @@
+{
+  "negotiation_agent": "negotiation_social_llm",
+  "memory": {
+    "backend": "plain"
+  }
+}

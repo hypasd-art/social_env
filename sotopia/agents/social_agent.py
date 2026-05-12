@@ -6,6 +6,7 @@ from typing import Any
 
 from sotopia.agents.llm_agent import LLMAgent
 from sotopia.agents.memory import EpisodicMemory
+from sotopia.agents.memory_episodic_summarizing import SummarizingEpisodicMemory
 from sotopia.generation_utils.generate import agenerate_action, agenerate_goal, fill_template
 from sotopia.messages import AgentAction, Observation
 
@@ -18,10 +19,21 @@ class SocialLLMAgent(LLMAgent):
         *args: Any,
         memory_max: int = 40,
         memory_inject_lines: int = 8,
+        memory_summary_model: str | None = None,
+        memory_max_recent_chars: int = 12_000,
+        memory_preserve_tail_lines: int = 6,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.memory = EpisodicMemory(max_entries=memory_max)
+        if memory_summary_model:
+            self.memory = SummarizingEpisodicMemory(
+                max_entries=memory_max,
+                max_recent_chars=memory_max_recent_chars,
+                preserve_tail_lines=memory_preserve_tail_lines,
+                summary_model=memory_summary_model,
+            )
+        else:
+            self.memory = EpisodicMemory(max_entries=memory_max)
         self.memory_inject_lines = memory_inject_lines
 
     async def aact(self, obs: Observation) -> AgentAction:
@@ -31,12 +43,13 @@ class SocialLLMAgent(LLMAgent):
             self._goal = await agenerate_goal(
                 self.model_name,
                 background=self.inbox[0][1].to_natural_language(),
+                agent=self.agent_name,
             )
 
         if len(obs.available_actions) == 1 and "none" in obs.available_actions:
             return AgentAction(action_type="none", argument="", to=[])
 
-        mem_block = self.memory.recent(self.memory_inject_lines)
+        mem_block = await self.memory.arecent(self.memory_inject_lines)
         goal_effective = self._goal
         if mem_block:
             goal_effective = (
