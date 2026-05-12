@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, Field
@@ -111,11 +112,15 @@ CRITICAL: the profile describes one **specific person**, NOT a company, fund, re
 Role key (context only): ``{role}``
 Role-side hint (the institution they represent; do NOT name the institution in any output field): ``{role_hint}``
 Tag (experiment label): ``{tag}``
+Assigned persona archetype (MUST emphasize): ``{diversity_brief}``
 
 Constraints (MUST follow):
 - ``first_name`` <= 12 chars; ``last_name`` <= 16 chars; ASCII-friendly.
 - ``moral_values`` and ``schwartz_personal_values`` are short token lists (2–4 items each).
 - ``decision_making_style`` must mention calendar/session protocol awareness.
+- **Conversational differentiation:** In ``public_info`` and especially ``personality_and_values``, specify a **distinct**
+  spoken style (default register, pacing, typical openers/fillers, what they avoid) that would sound **different**
+  from another negotiator in the same market episode—without copying the archetype label verbatim as a name.
 - No sensitive personal data, no real public figures.
 
 Output ONLY a JSON OBJECT WITH FILLED-IN VALUES (do NOT echo a JSON schema, do NOT include
@@ -141,6 +146,46 @@ keys (string / int / list[str] as shown):
 Reference field semantics (DO NOT include the schema itself in the output):
 {format_instructions}
 """
+
+
+_PERSONA_ARCHETYPES: tuple[dict[str, str], ...] = (
+    {
+        "label": "decisive-competitor",
+        "big_five": "Openness: medium; Conscientiousness: high; Extraversion: high; Agreeableness: low; Neuroticism: medium",
+        "values": "achievement, power, self-direction",
+        "style": "pushes hard anchors, tolerates conflict, seeks first-mover advantage",
+    },
+    {
+        "label": "risk-averse-stabilizer",
+        "big_five": "Openness: low; Conscientiousness: high; Extraversion: low; Agreeableness: high; Neuroticism: medium",
+        "values": "security, conformity, benevolence",
+        "style": "prefers downside protection, staged commitments, and clear safeguards",
+    },
+    {
+        "label": "analytical-strategist",
+        "big_five": "Openness: high; Conscientiousness: high; Extraversion: low; Agreeableness: medium; Neuroticism: low",
+        "values": "self-direction, achievement, universalism",
+        "style": "optimizes with data and contingencies, avoids emotional framing",
+    },
+    {
+        "label": "relational-mediator",
+        "big_five": "Openness: medium; Conscientiousness: medium; Extraversion: high; Agreeableness: high; Neuroticism: low",
+        "values": "benevolence, fairness, reciprocity",
+        "style": "builds trust, reframes disputes, and trades concessions for relationship durability",
+    },
+    {
+        "label": "opportunistic-bargainer",
+        "big_five": "Openness: high; Conscientiousness: medium; Extraversion: medium; Agreeableness: low; Neuroticism: high",
+        "values": "stimulation, achievement, hedonism",
+        "style": "adapts quickly to leverage windows and exploits timing asymmetries",
+    },
+    {
+        "label": "principled-guardian",
+        "big_five": "Openness: medium; Conscientiousness: high; Extraversion: medium; Agreeableness: medium; Neuroticism: low",
+        "values": "tradition, fairness, security",
+        "style": "protects process legitimacy, emphasizes consistency and enforceable commitments",
+    },
+)
 
 # 规则 / fallback 用的 named human personas（每个角色一名**具体的人**，避免落到公司化字面）。
 DEFAULT_HUMAN_PERSONAS: dict[str, dict[str, Any]] = {
@@ -323,6 +368,23 @@ def _looks_corporate(name: str) -> bool:
     return any(tok in s for tok in _CORPORATE_NAME_TOKENS)
 
 
+def _archetype_briefs_for_roles(roles: Sequence[str], *, tag: str) -> dict[str, str]:
+    role_list = list(roles)
+    if not role_list:
+        return {}
+    h = hashlib.sha1(tag.encode("utf-8")).hexdigest()
+    offset = int(h[:8], 16) % len(_PERSONA_ARCHETYPES)
+    out: dict[str, str] = {}
+    for i, role in enumerate(role_list):
+        a = _PERSONA_ARCHETYPES[(offset + i) % len(_PERSONA_ARCHETYPES)]
+        out[role] = (
+            f"{a['label']}; target_big_five={a['big_five']}; "
+            f"target_values={a['values']}; negotiation_style={a['style']}. "
+            "Keep this profile clearly distinct from other roles in the same batch."
+        )
+    return out
+
+
 def build_static_negotiation_agent_profile(role: str, *, tag: str) -> AgentProfile:
     """从 ``DEFAULT_HUMAN_PERSONAS`` 装出一个**自然人** ``AgentProfile``。"""
     if role not in DEFAULT_HUMAN_PERSONAS:
@@ -409,6 +471,7 @@ async def _agenerate_one_draft(
     *,
     model_name: str,
     tag: str,
+    diversity_brief: str,
 ) -> LLMNegotiationAgentDraft:
     parser = PydanticOutputParser[LLMNegotiationAgentDraft](
         pydantic_object=LLMNegotiationAgentDraft
@@ -420,6 +483,7 @@ async def _agenerate_one_draft(
             role=role,
             role_hint=ROLE_SUMMARY_EN.get(role, role),
             tag=tag,
+            diversity_brief=diversity_brief,
         ),
         output_parser=parser,
         structured_output=False,
@@ -456,11 +520,17 @@ async def agenerate_negotiation_agent_profiles(
         raise ValueError(f"llm_roles {orphan_llm} not contained in roles={role_list}")
 
     sem = asyncio.Semaphore(max(1, concurrency))
+    diversity_briefs = _archetype_briefs_for_roles(role_list, tag=tag)
 
     async def one_llm(role: str) -> tuple[str, LLMNegotiationAgentDraft | BaseException]:
         async with sem:
             try:
-                draft = await _agenerate_one_draft(role, model_name=model_name, tag=tag)
+                draft = await _agenerate_one_draft(
+                    role,
+                    model_name=model_name,
+                    tag=tag,
+                    diversity_brief=diversity_briefs.get(role, "balanced-generalist"),
+                )
                 return role, draft
             except BaseException as exc:  # noqa: BLE001 — fallback covers ValidationError / network / 4xx
                 return role, exc
@@ -482,9 +552,29 @@ async def agenerate_negotiation_agent_profiles(
         else:
             # 角色被划入 llm_set 但生成失败：fallback 到静态人设；非 llm 角色也走这条路。
             ap = build_static_negotiation_agent_profile(role, tag=tag)
-        if save_to_storage:
-            ap.save()
         out[role] = ap
+
+    # 兜底：若 LLM 输出过于趋同，强制把人格描述拉回各自 archetype，保证同批次人格差异。
+    signatures = {((out[r].big_five or "").strip().lower(), (out[r].personality_and_values or "").strip().lower()) for r in role_list if r in out}
+    if len(signatures) <= 1 and len(role_list) > 1:
+        for role in role_list:
+            ap = out.get(role)
+            if ap is None:
+                continue
+            brief = diversity_briefs.get(role, "")
+            if brief:
+                ap.personality_and_values = (
+                    f"{ap.personality_and_values} Archetype cue: {brief[:260]}"
+                )[:600]
+                if "target_big_five=" in brief:
+                    target = brief.split("target_big_five=", 1)[1].split("; target_values=", 1)[0].strip()
+                    if target:
+                        ap.big_five = target[:240]
+
+    if save_to_storage:
+        for role in role_list:
+            if role in out:
+                out[role].save()
 
     if fallback_roles:
         # 非致命：用 print 而非 logging.warning，避免在 CLI 静默路径里被吃掉。

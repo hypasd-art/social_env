@@ -32,6 +32,7 @@ import asyncio
 import sys
 import uuid
 from collections.abc import Awaitable, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,8 +43,10 @@ from .eval_logging import (
     episode_done_line,
     episode_start_line,
     get_negotiation_batch_logger,
+    negotiation_artifact_leaf_dir,
 )
 from .scenario_loader import load_negotiation_scenario_from_environment_profile_pk
+from .types import NegotiationTimelineParams
 
 
 def uniform_negotiation_model_dict(
@@ -172,6 +175,8 @@ async def run_long_term_negotiation_eval_batch_async(
     num_participants: int | None = None,
     model_trace_dir: Path | str | None = None,
     execution_trace_dir: Path | str | None = None,
+    nest_trace_dirs_by_model_time: bool = False,
+    run_timestamp: str | None = None,
     negotiation_run_config: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """对多个 ``agent_models`` 各重复 ``repeats_per_model`` 次，并发上限 ``batch_size``。
@@ -187,8 +192,14 @@ async def run_long_term_negotiation_eval_batch_async(
     completion 与解析结果写入该目录下 **按 agent 分文件** 的 JSONL，并另写终局评测文件（文件名由
     episode 的 ``tag`` 派生，见 ``model_trace``）。
 
+    ``nest_trace_dirs_by_model_time``（默认 ``False``）：为 ``True`` 时，在
+    ``model_trace_dir`` / ``execution_trace_dir`` 下追加
+    ``{sanitized_agent_model}/{run_timestamp}/``，便于按测试模型名与时间戳分子目录归档；
+    ``run_timestamp`` 缺省为批量开始时生成的 ``YYYYMMDD_HHMMSS``（整条 batch 共用同一时间戳目录）。
+
     ``execution_trace_dir``：若指定，每场结束后写入 **全局执行档案** ``*.execution.json``
-    （合同里程碑、时间线、完整 ``action_log`` 等），文件名同样由 ``tag`` 派生。
+    （合同里程碑、时间线、完整 ``action_log``、**完整** ``messenger_inbox`` 等），文件名由 ``tag`` 派生；
+    同时默认写入配对的 ``*.execution.transcript.txt``（纯文本复盘稿，无截断）。
 
     ``negotiation_run_config``：与 ``negotiation-batch --run-config`` 相同；写入每条 JSONL
     记录的 ``negotiation_run_config`` 字段以便复现。
@@ -196,6 +207,7 @@ async def run_long_term_negotiation_eval_batch_async(
     if repeats_per_model < 1:
         raise ValueError("repeats_per_model must be >= 1")
     rid = run_id or uuid.uuid4().hex[:12]
+    artifact_stamp = (run_timestamp or "").strip() or datetime.now().strftime("%Y%m%d_%H%M%S")
 
     scenarios = list(scenario_environment_pks or ())
     jobs: list[tuple[int, str, str | None]]
@@ -246,11 +258,25 @@ async def run_long_term_negotiation_eval_batch_async(
 
         try:
             trace_kw: dict[str, Any] = {}
-            if model_trace_dir is not None:
-                trace_kw["model_trace_dir"] = model_trace_dir
+
+            def _resolved_trace_base(base: Path | str | None) -> Path | None:
+                if base is None:
+                    return None
+                pb = Path(base)
+                if nest_trace_dirs_by_model_time:
+                    resolved = pb.resolve() / negotiation_artifact_leaf_dir(agent_model, artifact_stamp)
+                else:
+                    resolved = pb.resolve()
+                resolved.mkdir(parents=True, exist_ok=True)
+                return resolved
+
+            resolved_mt = _resolved_trace_base(model_trace_dir)
+            resolved_et = _resolved_trace_base(execution_trace_dir)
+            if resolved_mt is not None:
+                trace_kw["model_trace_dir"] = resolved_mt
                 trace_kw["model_trace_tag"] = tag
-            if execution_trace_dir is not None:
-                trace_kw["execution_trace_dir"] = execution_trace_dir
+            if resolved_et is not None:
+                trace_kw["execution_trace_dir"] = resolved_et
                 trace_kw["execution_trace_tag"] = tag
             res = await run_llm_negotiation_episode_evaluation(
                 md,

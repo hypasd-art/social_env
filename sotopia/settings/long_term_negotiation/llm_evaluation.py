@@ -25,6 +25,8 @@
    ``NegotiationSocialLLMAgent`` 与记忆后端（见 ``negotiation_run_config.py``；CLI 为 ``--run-config``）。
 3. ``LongTermNegotiationEnv``（``env.py``）— 挂载 ``NegotiationWorldController``、``SystemState``、
    messenger、外部事件 runner 等；用于一条 episode 的宏观调度与会话闭环。
+   若提供 ``environment_profile_pk`` 且能解析 ``AgentProfileV2.initial_resources``，则经
+   ``initial_resources=`` 写入 ``SystemState.agent_resources``，与 profile 存储对齐。
 4. ``await LongTermNegotiationEnv.run_episode_async`` — 驱动 ``ctrl`` 的各 ``Phase``
    （约见 → 应答 → SESSION 内多轮 Agent 行动），直到终止或 ``max_macro_steps``；
    内部通过各 agent 的 ``aact`` 生成 ``AgentAction``（见 ``negotiation_llm_agent`` 与 ``controller.parse_agent_action_payload``）。
@@ -52,7 +54,9 @@ from pathlib import Path
 from typing import Any
 
 from sotopia.database import EnvironmentProfile, SotopiaDimensions
+from sotopia.database import AgentProfile, EnvAgentComboStorage, RelationshipProfile
 from sotopia.database.base_models import LLMEvalBaseModel
+from sotopia.benchmark_v2_data_models import AgentProfileV2
 
 from sotopia.envs.evaluators import (
     EpisodeLLMEvaluator,
@@ -153,6 +157,183 @@ def build_llm_negotiation_agents(
     return build_negotiation_agents_from_run_config(model_dict, roster, negotiation_run_config)
 
 
+def _agent_profile_v2_for_agent(agent_pk: str) -> Any | None:
+    """按 AgentProfile.pk 尝试定位对应 AgentProfileV2。"""
+    try:
+        ap = AgentProfile.get(agent_pk)
+    except Exception:
+        return None
+    try:
+        rows = list(
+            AgentProfileV2.find(  # type: ignore[attr-defined]
+                AgentProfileV2.model_id == getattr(ap, "model_id", ""),
+            ).all()
+        )
+    except Exception:
+        rows = []
+    if not rows:
+        return None
+    ap_tag = str(getattr(ap, "tag", "") or "")
+    tagged = [r for r in rows if str(getattr(r, "tag", "") or "") == ap_tag]
+    return tagged[0] if tagged else rows[0]
+
+
+def _relationship_snippets_for_agent(agent_pk: str, in_episode_agent_pks: set[str]) -> list[str]:
+    out: list[str] = []
+    try:
+        left = list(
+            RelationshipProfile.find(  # type: ignore[attr-defined]
+                RelationshipProfile.agent_1_id == agent_pk
+            ).all()
+        )
+    except Exception:
+        left = []
+    try:
+        right = list(
+            RelationshipProfile.find(  # type: ignore[attr-defined]
+                RelationshipProfile.agent_2_id == agent_pk
+            ).all()
+        )
+    except Exception:
+        right = []
+    for rp in list(left) + list(right):
+        a1 = str(getattr(rp, "agent_1_id", "") or "")
+        a2 = str(getattr(rp, "agent_2_id", "") or "")
+        other = a2 if a1 == agent_pk else a1
+        if other not in in_episode_agent_pks:
+            continue
+        story = str(getattr(rp, "background_story", "") or "").strip()
+        if not story:
+            continue
+        out.append(story)
+    # 去重保序
+    seen: set[str] = set()
+    dedup: list[str] = []
+    for s in out:
+        if s in seen:
+            continue
+        seen.add(s)
+        dedup.append(s)
+    return dedup[:6]
+
+
+def _build_role_addons_from_env_binding(
+    environment_profile_pk: str,
+    roster: tuple[str, ...],
+) -> dict[str, str]:
+    """从 EnvAgentComboStorage 读取当前场景绑定的 agent/profile/relationship 摘要，按 role 返回。"""
+    try:
+        combos = list(
+            EnvAgentComboStorage.find(  # type: ignore[attr-defined]
+                EnvAgentComboStorage.env_id == environment_profile_pk
+            ).all()
+        )
+    except Exception:
+        return {}
+    if not combos:
+        return {}
+    combos = sorted(combos, key=lambda x: str(getattr(x, "pk", "") or ""))
+    combo = combos[0]
+    agent_ids = list(getattr(combo, "agent_ids", []) or [])
+    role_to_pk = {role: agent_ids[i] for i, role in enumerate(roster) if i < len(agent_ids)}
+    in_episode = set(role_to_pk.values())
+    role_display_name: dict[str, str] = {}
+    for role, agent_pk in role_to_pk.items():
+        try:
+            ap = AgentProfile.get(agent_pk)
+            fn = str(getattr(ap, "first_name", "") or "").strip()
+            ln = str(getattr(ap, "last_name", "") or "").strip()
+            dn = " ".join(x for x in (fn, ln) if x).strip()
+            role_display_name[role] = dn or role
+        except Exception:
+            role_display_name[role] = role
+    out: dict[str, str] = {}
+    for role, agent_pk in role_to_pk.items():
+        parts: list[str] = []
+        peers = [f"{r} => {role_display_name.get(r, r)}" for r in roster if r in role_display_name]
+        if peers:
+            parts.append(
+                "[display_names]\n"
+                + "\n".join(f"- {p}" for p in peers)
+                + "\nUse display names in speak messages; keep canonical ids only in JSON payload fields."
+            )
+        try:
+            ap1 = AgentProfile.get(agent_pk)
+            pav = str(getattr(ap1, "personality_and_values", "") or "").strip()
+            marker = "[dialogue_voice"
+            if marker in pav:
+                i0 = pav.index(marker)
+                snippet = pav[i0 : i0 + 980].strip()
+                parts.append("[AgentProfile — natural language style]\n" + snippet)
+        except Exception:
+            pass
+        ap2 = _agent_profile_v2_for_agent(agent_pk)
+        if ap2 is not None:
+            parts.append(
+                "[AgentProfileV2] "
+                f"role_type={getattr(ap2, 'role_type', '')}; "
+                f"risk_preference={getattr(ap2, 'risk_preference', '')}; "
+                f"initial_reputation={getattr(ap2, 'initial_reputation', '')}; "
+                f"initial_resources={dict(getattr(ap2, 'initial_resources', {}) or {})}"
+            )
+        rels = _relationship_snippets_for_agent(agent_pk, in_episode)
+        if rels:
+            parts.append("[RelationshipProfile related to you]\n- " + "\n- ".join(rels))
+        if parts:
+            out[role] = "\n".join(parts)
+    return out
+
+
+def _initial_resources_for_roster_from_env(
+    environment_profile_pk: str | None,
+    roster: tuple[str, ...],
+) -> dict[str, dict[str, float]] | None:
+    """从场景绑定的 ``AgentProfileV2.initial_resources`` 合并进默认 bundle，供 ``LongTermNegotiationEnv`` 使用。
+
+    若无 combo、或无任一 V2 含数值型 ``initial_resources`` 条目，返回 ``None``（环境走原有默认逻辑）。
+    """
+    if not environment_profile_pk:
+        return None
+    from .roles import default_agent_resources_bundle
+
+    default_bundle = default_agent_resources_bundle()
+    try:
+        combos = list(
+            EnvAgentComboStorage.find(  # type: ignore[attr-defined]
+                EnvAgentComboStorage.env_id == environment_profile_pk
+            ).all()
+        )
+    except Exception:
+        return None
+    if not combos:
+        return None
+    combos = sorted(combos, key=lambda x: str(getattr(x, "pk", "") or ""))
+    combo = combos[0]
+    agent_ids = list(getattr(combo, "agent_ids", []) or [])
+    role_to_pk = {role: agent_ids[i] for i, role in enumerate(roster) if i < len(agent_ids)}
+
+    def _base_for(role: str) -> dict[str, float]:
+        raw = dict(default_bundle.get(role, {"cash": 400.0}))
+        return {str(k): float(v) for k, v in raw.items()}
+
+    merged: dict[str, dict[str, float]] = {}
+    touched = False
+    for role in roster:
+        base = _base_for(role)
+        pk = role_to_pk.get(role)
+        if pk:
+            ap2 = _agent_profile_v2_for_agent(pk)
+            if ap2 is not None:
+                ir = dict(getattr(ap2, "initial_resources", {}) or {})
+                for k, v in ir.items():
+                    if isinstance(v, (int, float)):
+                        base[str(k)] = float(v)
+                if ir and any(isinstance(v, (int, float)) for v in ir.values()):
+                    touched = True
+        merged[role] = base
+    return merged if touched else None
+
+
 async def run_llm_negotiation_episode_evaluation(
     model_dict: dict[str, str],
     *,
@@ -195,19 +376,26 @@ async def run_llm_negotiation_episode_evaluation(
     ``{stem}_terminal_eval.jsonl``。各行含全局单调 ``step_index``。
 
     ``execution_trace_dir`` 非空时：在 episode 跑完后将 **全局执行档案**（时间线、合同 history、
-    ``action_log`` / ``session_log`` 等）写入 ``{execution_trace_dir}/{execution_trace_tag}.execution.json``
-    （见 ``episode_execution_record.safe_execution_trace_filename``）。
+    完整 ``messenger_inbox``、``action_log`` / ``session_log`` 等）写入
+    ``{execution_trace_dir}/{execution_trace_tag}.execution.json``（见
+    ``episode_execution_record.safe_execution_trace_filename``），并默认 **同目录** 再写一份
+    ``*.execution.transcript.txt``（``format_episode_interaction_transcript``：纯文本、按节展开
+    全量交互，便于直接打开阅读）。若同场已开启 ``model_trace_dir``，上述 JSON / transcript
+    会 **合并** 各次 LLM 调用的完整 ``input_values``、渲染后 user prompt、首次 API 原始正文及
+    （若有）坏输出修复链原文（字段 ``llm_model_traces``、transcript §8）。
     """
     if "env" not in model_dict:
         raise KeyError("model_dict must contain key 'env' for the evaluator / scoring model.")
 
     trace_token: Token | None = None
+    trace_stem: str | None = None
     if model_trace_dir is not None:
         from .model_trace import begin_episode_trace, safe_trace_filename
 
         trace_path = Path(model_trace_dir).resolve() / safe_trace_filename(
             model_trace_tag or "negotiation_episode"
         )
+        trace_stem = trace_path.stem
         trace_token = begin_episode_trace(trace_path)
 
     n_from_scen: int | None = None
@@ -256,11 +444,23 @@ async def run_llm_negotiation_episode_evaluation(
         agents_map = build_llm_negotiation_agents(
             model_dict, roster, negotiation_run_config=negotiation_run_config
         )
+        if environment_profile_pk:
+            role_addons = _build_role_addons_from_env_binding(environment_profile_pk, roster)
+            for role, addon in role_addons.items():
+                ag = agents_map.get(role)
+                if ag is None:
+                    continue
+                base_goal = str(getattr(ag, "goal", "") or "")
+                extra = f"\n\n[Loaded profile+relationship context for this episode]\n{addon}"
+                ag.goal = (base_goal + extra).strip() if base_goal else extra.strip()
 
+        init_res = _initial_resources_for_roster_from_env(environment_profile_pk, roster)
         env = LongTermNegotiationEnv(
             agents_map,
             params=params_run,
             strict_design_v1=strict_run,
+            predefined_outcome_rule=predefined_rule,
+            initial_resources=init_res,
         )
 
         terminal = await env.run_episode_async(max_macro_steps=max_macro_steps)
@@ -275,7 +475,12 @@ async def run_llm_negotiation_episode_evaluation(
             ex_path = Path(execution_trace_dir).resolve() / safe_execution_trace_filename(
                 execution_trace_tag or "negotiation_episode"
             )
-            write_episode_execution_record(env, ex_path)
+            write_episode_execution_record(
+                env,
+                ex_path,
+                model_trace_dir=Path(model_trace_dir).resolve() if model_trace_dir else None,
+                model_trace_stem=trace_stem,
+            )
 
         llm_agg: ScriptEnvironmentResponse | None = None
         if run_terminal_llm_eval:

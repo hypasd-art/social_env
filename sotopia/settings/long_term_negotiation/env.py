@@ -67,6 +67,7 @@ class LongTermNegotiationEnv(MessengerMixin):
         evaluators: list[Any] | None = None,
         terminal_evaluators: list[Any] | None = None,
         model_name: str = "gpt-4o-mini",
+        predefined_outcome_rule: dict[str, Any] | None = None,
     ) -> None:
         MessengerMixin.__init__(self)
         names = tuple(sorted(agents.keys()))
@@ -126,6 +127,59 @@ class LongTermNegotiationEnv(MessengerMixin):
         self.model_name: str = model_name
         self.turn_number: int = 0
         self.last_terminal_script_response: ScriptEnvironmentResponse | None = None
+        self.predefined_outcome_rule: dict[str, Any] = (
+            dict(predefined_outcome_rule) if isinstance(predefined_outcome_rule, dict) else {}
+        )
+        self._contract_status_settlement_applied: bool = False
+
+    def _apply_contract_status_settlement_if_needed(self) -> None:
+        """按主合同状态自动结算，并把收益写回 ``SystemState.agent_resources``。"""
+        if self._contract_status_settlement_applied:
+            return
+        if not self.predefined_outcome_rule:
+            return
+        pcs = getattr(self.ctrl, "primary_contract_id", None)
+        if not pcs:
+            return
+        c = getattr(self.ctrl, "contracts", {}).get(pcs)
+        if c is None:
+            return
+        status = str(getattr(c, "status", "") or "").lower()
+        if status not in {"proposed", "amended", "accepted", "signed", "rejected", "failed"}:
+            return
+
+        from .negotiation_metrics import compute_predefined_rule_settlement_by_contract_status
+
+        metrics = compute_predefined_rule_settlement_by_contract_status(
+            env=self,
+            predefined_outcome_rule=self.predefined_outcome_rule,
+            contract_status=status,
+        )
+
+        settlement_by_agent: dict[str, float] = {}
+        for agent in self.system_state.agent_keys:
+            ind_key = f"negotiation_predefined_rule_individual_profit_{agent}"
+            comp_key = f"negotiation_predefined_rule_company_profit_{agent}"
+            if ind_key in metrics:
+                payout = float(metrics.get(ind_key, 0.0) or 0.0)
+            else:
+                payout = float(metrics.get(comp_key, 0.0) or 0.0)
+            if payout == 0.0:
+                continue
+            res = self.system_state.agent_resources.setdefault(agent, {})
+            cash0 = float(res.get("cash", 0.0) or 0.0)
+            res["cash"] = cash0 + payout
+            settlement_by_agent[agent] = payout
+
+        self._contract_status_settlement_applied = True
+        if settlement_by_agent:
+            self.ctrl.record_execution_event(
+                "contract_settlement_applied",
+                "已按主合同状态与 predefined_outcome_rule 自动结算并更新现金。",
+                primary_contract_status=status,
+                settlement_by_agent=settlement_by_agent,
+                total_settlement=float(sum(settlement_by_agent.values())),
+            )
 
     def _ext_tick(
         self,
@@ -194,6 +248,7 @@ class LongTermNegotiationEnv(MessengerMixin):
         self.turn_number = 0
         self.reset_inbox()
         self.last_terminal_script_response = None
+        self._contract_status_settlement_applied = False
         self.recv_message(
             "Environment",
             SimpleMessage(message="[NegotiationWorld] Episode start."),
@@ -289,6 +344,7 @@ class LongTermNegotiationEnv(MessengerMixin):
             )
 
         self.last_episode_macro_steps = int(steps)
+        self._apply_contract_status_settlement_if_needed()
 
         terminal_resource_copy = {
             k: dict(self.system_state.agent_resources.get(k, {}))

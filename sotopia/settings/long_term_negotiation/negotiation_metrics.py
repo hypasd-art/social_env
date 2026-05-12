@@ -26,6 +26,19 @@ _FINAL_STATE_WEIGHT_LIQUIDITY_PRESERVED = 0.1
 _FINAL_STATE_WEIGHT_PREDEFINED_RULE = 0.25
 
 
+def primary_contract_status_factor(status: str) -> float:
+    st = str(status or "").lower()
+    primary_map = {
+        "proposed": 0.25,
+        "amended": 0.5,
+        "accepted": 0.75,
+        "signed": 1.0,
+        "rejected": 0.0,
+        "failed": 0.0,
+    }
+    return float(primary_map.get(st, 0.0))
+
+
 def _final_intermediate_snapshot(ctrl: Any) -> dict[str, Any] | None:
     snaps = list(getattr(ctrl, "state_snapshots", []) or [])
     if not snaps:
@@ -40,7 +53,6 @@ def _clip(v: float, lo: float, hi: float) -> float:
 def _compute_predefined_rule_payout_metrics(
     *,
     env: Any,
-    success_factor: float,
     primary_factor: float,
     predefined_outcome_rule: dict[str, Any] | None,
 ) -> tuple[dict[str, float], float]:
@@ -76,7 +88,9 @@ def _compute_predefined_rule_payout_metrics(
     realized_margin = _clip(raw_margin, lo, hi)
     out["negotiation_predefined_rule_realized_margin"] = realized_margin
 
-    is_contract_effective = 1.0 if (success_factor > 0.0 and primary_factor >= 0.75) else 0.0
+    # 与 ``env._apply_contract_status_settlement_if_needed`` 一致：按主合同状态计「生效」，
+    # 不依赖 ``terminal == success``；否则 timeout 但已签约时现金已结算而本指标恒为 0。
+    is_contract_effective = 1.0 if primary_factor >= 0.75 else 0.0
     out["negotiation_predefined_rule_contract_effective"] = is_contract_effective
     total_profit = contract_value * realized_margin * is_contract_effective
     out["negotiation_predefined_rule_total_profit"] = total_profit
@@ -102,6 +116,23 @@ def _compute_predefined_rule_payout_metrics(
     rule_factor = _clip((realized_margin - lo) / (hi - lo), 0.0, 1.0) * is_contract_effective
     out["negotiation_predefined_rule_score"] = rule_factor
     return out, rule_factor
+
+
+def compute_predefined_rule_settlement_by_contract_status(
+    *,
+    env: Any,
+    predefined_outcome_rule: dict[str, Any] | None,
+    contract_status: str,
+) -> dict[str, float]:
+    """按合同状态计算应结算的个人资金变化（与数据构造规则同口径）。"""
+    primary_factor = primary_contract_status_factor(contract_status)
+    # 资金结算按“合同状态”驱动，不额外要求 terminal=success。
+    out, _ = _compute_predefined_rule_payout_metrics(
+        env=env,
+        primary_factor=primary_factor,
+        predefined_outcome_rule=predefined_outcome_rule,
+    )
+    return out
 
 
 def compute_negotiation_final_state_metrics(
@@ -178,14 +209,7 @@ def compute_negotiation_final_state_metrics(
         c = getattr(ctrl, "contracts", {}).get(pcs)
         if c is not None:
             status = str(getattr(c, "status", "") or "").lower()
-            primary_map = {
-                "proposed": 0.25,
-                "amended": 0.5,
-                "accepted": 0.75,
-                "signed": 1.0,
-                "rejected": 0.0,
-            }
-            primary_factor = float(primary_map.get(status, 0.0))
+            primary_factor = primary_contract_status_factor(status)
 
     solvency_factor = float(out["negotiation_final_state_solvency_ratio"])
     liquidity_factor = (
@@ -200,7 +224,6 @@ def compute_negotiation_final_state_metrics(
     )
     rule_out, rule_factor = _compute_predefined_rule_payout_metrics(
         env=env,
-        success_factor=success_factor,
         primary_factor=primary_factor,
         predefined_outcome_rule=predefined_outcome_rule,
     )
@@ -274,6 +297,8 @@ def compute_negotiation_rule_metrics(
 
 
 __all__ = [
+    "compute_predefined_rule_settlement_by_contract_status",
     "compute_negotiation_final_state_metrics",
     "compute_negotiation_rule_metrics",
+    "primary_contract_status_factor",
 ]

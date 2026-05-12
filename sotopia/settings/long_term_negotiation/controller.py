@@ -2006,10 +2006,12 @@ class NegotiationWorldController:
             c.financing["status"] = "not_required"
             c.financing["actor"] = None
         elif prev_f in ("committed", "declined"):
-            c.financing["actor"] = c.financing.get("actor") or "investor"
+            c.financing["actor"] = c.financing.get("actor") or (
+                "investor" if "investor" in self.agent_names else "rule_engine"
+            )
         else:
             c.financing["status"] = "pending"
-            c.financing["actor"] = "investor"
+            c.financing["actor"] = "investor" if "investor" in self.agent_names else "rule_engine"
         r_flag = int(c.terms.get("regulatory_required", 0) or 0)
         c.regulatory["required"] = r_flag
         prev_r = str(c.regulatory.get("status", "") or "")
@@ -2017,10 +2019,71 @@ class NegotiationWorldController:
             c.regulatory["status"] = "not_required"
             c.regulatory["actor"] = None
         elif prev_r in ("approved", "blocked"):
-            c.regulatory["actor"] = c.regulatory.get("actor") or "regulator"
+            c.regulatory["actor"] = c.regulatory.get("actor") or (
+                "regulator" if "regulator" in self.agent_names else "rule_engine"
+            )
         else:
             c.regulatory["status"] = "pending"
-            c.regulatory["actor"] = "regulator"
+            c.regulatory["actor"] = "regulator" if "regulator" in self.agent_names else "rule_engine"
+
+    def _auto_rule_engine_reviews(
+        self,
+        c: NegotiationContract,
+        resources_snapshot: Callable[[], dict[str, dict[str, float]]],
+    ) -> None:
+        """当无 investor/regulator 角色时，用 deterministic 规则自动完成融资/监管检查。"""
+        if c.status != "accepted":
+            return
+        res = resources_snapshot()
+        if (
+            int(c.financing.get("required", 0)) == 1
+            and c.financing.get("actor") == "rule_engine"
+            and c.financing.get("status") == "pending"
+        ):
+            price = float(c.terms.get("price", 0) or 0)
+            cash_a = float(res.get("firm_a", {}).get("cash", 0.0))
+            gap = max(0.0, price - cash_a - float(self.params.financing_buffer))
+            # rule: 融资缺口过大则拒绝；否则自动承诺
+            if gap > max(200.0, price * 0.35):
+                c.financing["status"] = "declined"
+                self._contract_append_history(
+                    c,
+                    "financing.declined_by_rule_engine",
+                    "__system__",
+                    detail={"contract_id": c.contract_id, "financing_gap": gap},
+                )
+            else:
+                c.financing["status"] = "committed"
+                self._contract_append_history(
+                    c,
+                    "financing.committed_by_rule_engine",
+                    "__system__",
+                    detail={"contract_id": c.contract_id, "financing_gap": gap},
+                )
+        if (
+            int(c.regulatory.get("required", 0)) == 1
+            and c.regulatory.get("actor") == "rule_engine"
+            and c.regulatory.get("status") == "pending"
+        ):
+            hard = int(c.terms.get("policy_hard_violation", 0) or 0)
+            comp = float(c.terms.get("compliance_score", 0.75) or 0.75)
+            if hard == 1 or comp < 0.45:
+                c.regulatory["status"] = "blocked"
+                c.status = "failed"
+                self._contract_append_history(
+                    c,
+                    "regulatory.blocked_by_rule_engine",
+                    "__system__",
+                    detail={"contract_id": c.contract_id, "hard_violation": hard, "compliance_score": comp},
+                )
+            else:
+                c.regulatory["status"] = "approved"
+                self._contract_append_history(
+                    c,
+                    "regulatory.approved_by_rule_engine",
+                    "__system__",
+                    detail={"contract_id": c.contract_id, "compliance_score": comp},
+                )
 
     def refresh_contract_contingencies_from_resources(
         self, resources: dict[str, dict[str, float]]
@@ -2041,6 +2104,7 @@ class NegotiationWorldController:
         if self.terminal:
             return
         self.refresh_contract_contingencies_from_resources(resources_snapshot())
+        self._auto_rule_engine_reviews(c, resources_snapshot)
         if c.status != "accepted" or not self._principal_acceptance_complete(c):
             return
         principals = sorted(PRINCIPAL_PARTY_ROLES & c.parties)
@@ -2065,11 +2129,11 @@ class NegotiationWorldController:
         self._contract_append_history(c, "contract.closed_signed", "__system__", detail={})
         self.record_execution_event(
             "contract_fully_signed",
-            "合同已完全生效（全部主体签署且融资/监管等附条件满足），世界将以 success 终止",
+            "合同已完全生效（全部主体签署且融资/监管等附条件满足）；世界继续运行",
             contract_id=c.contract_id,
             status="signed",
         )
-        self._terminate("success")
+        self.mark_structural_progress()
 
     def _reevaluate_success(
         self,

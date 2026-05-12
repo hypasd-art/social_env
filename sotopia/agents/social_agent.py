@@ -33,7 +33,10 @@ class SocialLLMAgent(LLMAgent):
                 summary_model=memory_summary_model,
             )
         else:
-            self.memory = EpisodicMemory(max_entries=memory_max)
+            self.memory = EpisodicMemory(
+                max_entries=memory_max,
+                max_recent_chars=memory_max_recent_chars,
+            )
         self.memory_inject_lines = memory_inject_lines
 
     async def aact(self, obs: Observation) -> AgentAction:

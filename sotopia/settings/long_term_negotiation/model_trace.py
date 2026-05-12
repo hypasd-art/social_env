@@ -2,8 +2,17 @@
 
 由 ``run_llm_negotiation_episode_evaluation(..., model_trace_dir=...)`` 激活；``agenerate`` /
 ``agenerate_action`` / ``agenerate_goal`` 等经 ``generation_utils.generate.agenerate`` 的路径
-会自动写入 ``step_kind=agenerate`` 行。终局 ``EpisodeLLMEvaluator`` 由
-``record_terminal_eval_step`` 单独写 ``step_kind=terminal_eval``。
+会自动写入 ``step_kind=agenerate`` 行。每行含：
+
+* ``messages`` / ``full_rendered_prompt``：该次调用送入模型的完整 user 文本；
+* ``input_values``：模板变量全量（含 ``history``、``goal`` 等），便于对齐「当时输入」；
+* ``raw_model_content``：主模型 **首次** API 返回正文（解析前）；若有坏输出修复链则另有
+  ``raw_model_content_repaired``；
+* ``parsed``：解析器产出的结构化结果。
+
+终局 ``EpisodeLLMEvaluator`` 由 ``record_terminal_eval_step`` 单独写 ``step_kind=terminal_eval``。
+
+``load_model_trace_rows`` 供 ``episode_execution_record`` 合并进 ``*.execution.json``。
 
 **分文件策略**：``record_generation_step`` 按 ``input_values["agent"]`` 写入
 ``{stem}_{<agent>}.jsonl``；无 ``agent`` 时写入 ``{stem}_no_agent.jsonl``。终局评测写入
@@ -27,6 +36,7 @@ from typing import Any
 __all__ = [
     "begin_episode_trace",
     "end_episode_trace",
+    "load_model_trace_rows",
     "record_generation_step",
     "record_terminal_eval_step",
     "safe_trace_filename",
@@ -119,6 +129,28 @@ def end_episode_trace(token: Token) -> None:
     _ctx.reset(token)
 
 
+def load_model_trace_rows(trace_dir: Path | str, stem: str) -> list[dict[str, Any]]:
+    """读取某次 episode 写入目录下的 ``{stem}_*.jsonl``，按 ``step_index`` 合并排序。"""
+    root = Path(trace_dir).resolve()
+    stem = str(stem or "").strip() or "negotiation_episode"
+    rows: list[dict[str, Any]] = []
+    for path in sorted(root.glob(f"{stem}_*.jsonl")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    rows.sort(key=lambda r: int(r.get("step_index", 0) or 0))
+    return rows
+
+
 def record_generation_step(
     *,
     step_kind: str,
@@ -127,8 +159,18 @@ def record_generation_step(
     raw_content: str,
     parsed: Any,
     input_values: dict[str, Any] | None = None,
+    full_rendered_prompt: str | None = None,
+    raw_model_content_repaired: str | None = None,
+    generation_meta: dict[str, Any] | None = None,
 ) -> None:
-    """由 ``generation_utils.generate.agenerate`` 在每次 completion 解析成功后调用。"""
+    """由 ``generation_utils.generate.agenerate`` 在每次 completion 解析成功后调用。
+
+    ``raw_content``：主模型 **首次** 返回的 ``message.content``（解析前原文）。
+    ``raw_model_content_repaired``：若走 ``format_bad_output`` 修复链，则为修复模型产出的原文
+    （仍未经业务解析器以外的二次改写）；否则省略。
+    ``full_rendered_prompt``：模板变量替换后的完整 user 侧文本（与 ``messages[0].content`` 一致，便于单字段检索）。
+    ``input_values``：写入 **全量** 模板键值（含 ``history``、``goal`` 等），便于复盘「该时刻模型见到了什么」。
+    """
     state = _ctx.get()
     if state is None:
         return
@@ -146,10 +188,17 @@ def record_generation_step(
             "raw_model_content": raw_content,
             "parsed": _serialize(parsed),
         }
+        if full_rendered_prompt is not None:
+            row["full_rendered_prompt"] = full_rendered_prompt
+        if raw_model_content_repaired is not None:
+            row["raw_model_content_repaired"] = raw_model_content_repaired
+        if generation_meta:
+            row["generation_meta"] = _serialize(generation_meta)
         if input_values:
             row["input_values_summary"] = _serialize(
                 {k: v for k, v in input_values.items() if k in ("agent", "turn_number", "goal")}
             )
+            row["input_values"] = _serialize(dict(input_values))
         line = json.dumps(row, ensure_ascii=False, default=str)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "a", encoding="utf-8") as f:

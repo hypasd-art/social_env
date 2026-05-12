@@ -97,6 +97,12 @@ class FirmsOnlyRosterTest(unittest.TestCase):
         self.assertEqual(parsed.num_participants, 3)
         self.assertEqual(parsed.roles, ("firm_a", "firm_b", "firm_c"))
 
+        briefs = gm.get("predefined_news_briefs")
+        self.assertIsInstance(briefs, list)
+        self.assertGreaterEqual(len(briefs), 2)
+        self.assertIn("thread_id", briefs[0])
+        self.assertIn("complexity", briefs[0])
+
 
 class FirmsOnlyEnvSmokeTest(unittest.TestCase):
     def test_three_firm_env_runs_without_crash(self) -> None:

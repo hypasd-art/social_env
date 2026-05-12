@@ -8,9 +8,10 @@
     negotiation_agent: "negotiation_social_llm"  （唯一内置实现）
 
     memory.backend: "plain" | "summarizing"
-        - ``plain``：``EpisodicMemory``（默认）
-        - ``summarizing``：``SummarizingEpisodicMemory``；需 ``summary_model``（LiteLLM 路由键）
-          或特殊值 ``"$env"`` 表示复用 ``model_dict["env"]``（与终局评测模型相同）。
+        - ``plain``：``EpisodicMemory``；读取 ``arecent`` 时若超过 ``max_recent_chars`` 先做
+          **确定性截断压缩**（``truncate_chars``，无 LLM）。可选 ``max_recent_chars``（默认 12000）。
+        - ``summarizing``：``SummarizingEpisodicMemory``；超出窗口时先尝试 **LLM 摘要压缩** 早段，
+          失败则回退截断；需 ``summary_model``（LiteLLM 路由键）或 ``"$env"`` 表示复用 ``model_dict["env"]``。
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from .negotiation_llm_agent import (
 
 DEFAULT_NEGOTIATION_RUN_CONFIG: dict[str, Any] = {
     "negotiation_agent": "negotiation_social_llm",
-    "memory": {"backend": "plain"},
+    "memory": {"backend": "plain", "max_recent_chars": 12_000},
 }
 
 
@@ -66,7 +67,19 @@ def build_negotiation_agents_from_run_config(
     backend = str(mem.get("backend") or "plain").lower()
 
     if backend == "plain":
-        return build_negotiation_social_llm_agents(model_dict, roster)
+        social_kw: dict[str, Any] = {}
+        if "max_recent_chars" in mem:
+            v = mem["max_recent_chars"]
+            social_kw["memory_max_recent_chars"] = None if v is None else int(v)
+        if "memory_max" in mem:
+            social_kw["memory_max"] = int(mem["memory_max"])
+        if "memory_inject_lines" in mem:
+            social_kw["memory_inject_lines"] = int(mem["memory_inject_lines"])
+        return build_negotiation_social_llm_agents(
+            model_dict,
+            roster,
+            social_memory_kwargs=social_kw if social_kw else None,
+        )
 
     if backend == "summarizing":
         sm = mem.get("summary_model")
@@ -79,7 +92,9 @@ def build_negotiation_agents_from_run_config(
             )
         social_kw: dict[str, Any] = {}
         if "max_recent_chars" in mem:
-            social_kw["memory_max_recent_chars"] = int(mem["max_recent_chars"])
+            v = mem["max_recent_chars"]
+            if v is not None:
+                social_kw["memory_max_recent_chars"] = int(v)
         if "preserve_tail_lines" in mem:
             social_kw["memory_preserve_tail_lines"] = int(mem["preserve_tail_lines"])
         if "memory_max" in mem:

@@ -26,6 +26,7 @@ from sotopia.messages.message_classes import (
 )
 from sotopia.utils import format_docstring
 
+from sotopia.agents.memory_summarization import truncate_chars
 
 from sotopia.generation_utils.output_parsers import (
     OutputParser,
@@ -56,6 +57,53 @@ def fill_template(template: str, **kwargs: str) -> str:
     for k, v in kwargs.items():
         template = template.replace(f"{{{k}}}", v)
     return template
+
+
+def _substituted_template_length(template: str, iv: dict[str, Any]) -> int:
+    t = template
+    for key, value in iv.items():
+        t = t.replace(f"{{{key}}}", str(value))
+    return len(t)
+
+
+def _clamp_input_values_to_max_rendered(
+    template: str,
+    input_values: dict[str, Any],
+    *,
+    max_rendered_chars: int,
+) -> dict[str, Any]:
+    """当拼接后 user 文本将超过 ``max_rendered_chars`` 时，按优先级对大块字段做 ``truncate_chars``。"""
+    if max_rendered_chars <= 0:
+        return dict(input_values)
+
+    # 不收缩 schema 指令，避免结构化输出解析失败；超长时依赖最终硬截断。
+    protected = frozenset({"format_instructions"})
+
+    iv: dict[str, Any] = {str(k): str(v) for k, v in input_values.items()}
+    priority = (
+        "history",
+        "background",
+        "goal",
+        "examples",
+        "inspiration_prompt",
+        "agent_profile",
+        "text",
+    )
+    safety = 0
+    while _substituted_template_length(template, iv) > max_rendered_chars and safety < 200:
+        safety += 1
+        cur = _substituted_template_length(template, iv)
+        over = cur - max_rendered_chars
+        candidates = [k for k in priority if k in iv and k not in protected and len(iv[k]) > 512]
+        tail = [k for k in iv if k not in candidates and k not in protected and len(iv[k]) > 512]
+        tail.sort(key=lambda k: len(iv[k]), reverse=True)
+        ordered = candidates + tail
+        if not ordered:
+            break
+        key = ordered[0]
+        target = max(512, len(iv[key]) - max(over + 2048, len(iv[key]) // 5))
+        iv[key] = truncate_chars(iv[key], target)
+    return iv
 
 
 # Add handler to logger
@@ -233,7 +281,12 @@ async def agenerate(
         use_fixed_model_version: Whether to use fixed model versioning
         context: Optional context dict passed to output parser
 
-    Returns:
+    Oversized user prompt (automatic):
+
+        If ``SOTOPIA_MAX_RENDERED_USER_CHARS`` is set (default ``180000``; ``0`` / ``off`` / ``none``
+        disables), ``agenerate`` **before** ``acompletion`` shrinks large ``input_values`` fields in a
+        fixed priority (``history``, ``background``, ``goal``, …) using ``truncate_chars``, then applies
+        a hard cap on the final rendered user string.
         Parsed output of type OutputType
 
     Example:
@@ -261,10 +314,43 @@ async def agenerate(
     # Process template
     template = format_docstring(template)
 
+    raw_cap = os.environ.get("SOTOPIA_MAX_RENDERED_USER_CHARS", "180000").strip().lower()
+    try:
+        max_render = 0 if raw_cap in ("0", "", "none", "off", "disabled") else int(raw_cap)
+    except ValueError:
+        log.warning(
+            "agenerate: invalid SOTOPIA_MAX_RENDERED_USER_CHARS=%r; using default 180000",
+            os.environ.get("SOTOPIA_MAX_RENDERED_USER_CHARS"),
+        )
+        max_render = 180_000
+    if max_render > 0:
+        pre_len = _substituted_template_length(template, {k: str(v) for k, v in input_values.items()})
+        input_values = _clamp_input_values_to_max_rendered(
+            template,
+            dict(input_values),
+            max_rendered_chars=max_render,
+        )
+        post_len = _substituted_template_length(template, {k: str(v) for k, v in input_values.items()})
+        if post_len < pre_len - 500:
+            log.warning(
+                "agenerate: auto-shrank template-bound fields %s -> %s chars (cap=%s via SOTOPIA_MAX_RENDERED_USER_CHARS)",
+                pre_len,
+                post_len,
+                max_render,
+            )
+
     # 中文注释：把模板变量替换成具体上下文。
     # Replace template variables
     for key, value in input_values.items():
         template = template.replace(f"{{{key}}}", str(value))
+
+    if max_render > 0 and len(template) > max_render:
+        log.warning(
+            "agenerate: hard-capping rendered user message %s -> %s chars",
+            len(template),
+            max_render,
+        )
+        template = truncate_chars(template, max_render)
 
     # 中文注释：支持 custom/model@base_url 语法，
     # 便于接入 OpenAI-compatible 的第三方网关。
@@ -339,6 +425,8 @@ async def agenerate(
         {"context": context} if isinstance(output_parser, PydanticOutputParser) else {}
     )
 
+    first_raw = result if isinstance(result, str) else ("" if result is None else str(result))
+    repaired_raw: str | None = None
     try:
         parsed_result = output_parser.parse(result, **parse_kwargs)
     except Exception:
@@ -349,6 +437,9 @@ async def agenerate(
             bad_output_process_model or model_name,
             use_fixed_model_version,
             base_url=base_url,
+        )
+        repaired_raw = (
+            reformat_result if isinstance(reformat_result, str) else str(reformat_result)
         )
         parsed_result = output_parser.parse(reformat_result, **parse_kwargs)
 
@@ -361,14 +452,19 @@ async def agenerate(
     try:
         from sotopia.settings.long_term_negotiation.model_trace import record_generation_step
 
-        raw_str = result if isinstance(result, str) else ("" if result is None else str(result))
         record_generation_step(
             step_kind="agenerate",
             model_name=model_name,
             messages=messages,
-            raw_content=raw_str,
+            raw_content=first_raw,
             parsed=parsed_result,
-            input_values=input_values,
+            input_values=dict(input_values),
+            full_rendered_prompt=template,
+            raw_model_content_repaired=repaired_raw,
+            generation_meta={
+                "temperature": temperature_value,
+                "structured_output": bool(structured_output),
+            },
         )
     except Exception:
         pass

@@ -56,7 +56,10 @@
 
 - **JSONL（-o）**：机器可读的一条 episode 一整行 JSON；适合后续聚合脚本，不叫「运行时 log」。
 - **stderr 进度条**：批量跑时用 `tqdm` 显示完成进度与速率，不写进 `-o`，也不写入 `--log-file`。
-- **文本 log（可读）**：`--print-logs` 用 Rich 在控制台打出 INFO；`--log-file PATH` 向该路径 **追加** UTF-8 纯文本行（格式 `时间 | LEVEL | logger名 | message`），每条 episode 有 `episode_start` / `episode_done`（及失败时的 traceback）。配置入口：`long_term_negotiation.eval_logging.configure_negotiation_cli_logging`。第三方库（如 LiteLLM）在 INFO 仍可能刷屏，可按需调高其日志级别。
+- **文本 log（可读）**：`--print-logs` 用 Rich 在控制台打出 INFO；`--log-file PATH` 向该路径 **追加** UTF-8 纯文本行（格式 `时间 | LEVEL | logger名 | message`），每条 episode 有 `episode_start` / `episode_done`（及失败时的 traceback）。配置入口：`long_term_negotiation.eval_logging.configure_negotiation_cli_logging`。
+  - 若不传 `--log-file`，CLI 会自动落盘到 `logs/negotiation_batch_YYYYMMDD_HHMMSS.log`（文件名显式带运行时间）。
+  - 启动时会打印 `[negotiation-batch] run_started_at=... log_file=...` 便于追踪本次运行日志文件。
+  - 第三方库（如 LiteLLM）在 INFO 仍可能刷屏，可按需调高其日志级别。
 - **程序化**：若直接从 Python 调用 `run_long_term_negotiation_eval_batch*`，同样需要自行对上述函数调用一次以保持与 CLI 行为一致；传入 `negotiation_run_config=load_negotiation_run_config(Path("..."))` 与 CLI `--run-config` 等价；中间模型输出可传 `model_trace_dir=` / `execution_trace_dir=`；单次评测可传 `run_llm_negotiation_episode_evaluation(..., model_trace_dir=..., execution_trace_dir=..., model_trace_tag=..., execution_trace_tag=..., negotiation_run_config=...)`。
 
 无安装时用模块方式（需将 `social_env` 加入 `PYTHONPATH`）可参考该文件末尾的 `python -m sotopia.cli.benchmark.negotiation_batch` 说明。
@@ -217,24 +220,50 @@ SOTOPIA_STORAGE_BACKEND=local PYTHONPATH=. python scripts/generate_long_term_neg
    | `--agent-profile-out` 所指文件 | 本次导出的 agent 画像 JSON（含 `profile_source`） |
    | `--manifest-name` 所指文件 | 供 `negotiation-batch --scenario-manifest` 使用的 manifest |
 
+#### `long_term_negotiation_llm_manifest.json` 与 `long_term_negotiation_llm_agent_profiles.*.json` 的关系
+
+- **`long_term_negotiation_llm_manifest.json`（场景索引）**
+  - 记录本次生成出的环境集合（`environment_profile pk`、`codename`、`mode`、`lineup`、`num_participants` 等）。
+  - 是批评测入口文件：`negotiation-batch --scenario-manifest` **直接读取它**来展开 episode 任务。
+- **`long_term_negotiation_llm_agent_profiles.<name>.json`（画像绑定明细）**
+  - 记录每个环境对应的角色画像映射（`AgentProfile pk`/`AgentProfileV2 pk`、`profile_source` 等）。
+  - 主要用于审计/复现“当时每个场景绑定了哪套 agent 画像”，不是 CLI 必填参数。
+- **两者如何关联**
+  - 通过 `codename` + 同次生成 `tag` 对齐：manifest 给出“跑哪些 env”，agent-profile 文件给出“这些 env 绑定了谁”。
+
+#### 测试 / 评测时哪些文件会被加载，何时加载
+
+1. **运行 `generate_long_term_negotiation_llm.py` 时（数据构造阶段）**
+   - 写出 `long_term_negotiation_llm_manifest.json`（最后一步）。
+   - 写出 `--agent-profile-out` 指定的 agent-profile 明细 JSON（最后一步）。
+2. **运行 `negotiation-batch --scenario-manifest ...` 时（评测启动阶段）**
+   - `scenario_loader.environment_pks_from_manifest(...)` 在 CLI 参数解析后立刻读取 **manifest**，得到本批 `env_pk` 列表。
+3. **每个 episode 实际执行前（任务展开阶段）**
+   - `load_negotiation_scenario_from_environment_profile_pk(env_pk)` 按 manifest 中的 pk 去 `EnvironmentProfile/` 加载场景元数据（`timeline`、`lineup`、`num_participants` 等）。
+4. **agent-profile 明细 JSON 在评测阶段**
+   - 默认不自动加载（CLI 不依赖它）；仅在你做人设审计、回放或自定义脚本做“env->agent pk”核对时读取。
+
 **一句话**：先在本包 **`llm_agent_profile_gen`** 中造并保存 Agent，再对每条 inspiration 调 **`agenerate_env_profile`** 造 Environment，用 **`scenario_loader`** 接上谈判 **`game_metadata`**，最后经 **`generate_long_term_negotiation_scenarios.py`** 提供的 **`ltr`** 辅助函数把 combo / V2 / 事件等写入本地存储，并写 manifest。
 
 ```bash
 # 3. 用刚才造的 manifest 批量跑评测，写 JSONL + 文本 log（含中间状态最后一帧的 final_state_score）
 mkdir -p logs runs
-SOTOPIA_STORAGE_BACKEND=local PYTHONPATH=. python -m sotopia.cli.benchmark.negotiation_batch negotiation_batch \
-    --agent-model gpt-4o-mini \
-    --evaluator-model gpt-4o-mini \
-    --batch-size 3 --repeats 1 \
+SOTOPIA_STORAGE_BACKEND=local PYTHONPATH=. python -m sotopia.cli.benchmark.negotiation_batch negotiation-batch \
+    --agent-model gpt-5-mini \
+    --evaluator-model gpt-5-mini \
+    --batch-size 8 --repeats 1 \
     --scenario-manifest ~/.sotopia/data/long_term_negotiation_llm_manifest.json \
-    --print-logs --log-file logs/ltr_multi_firm_eval.txt \
+    --print-logs \
+    --execution-trace-dir runs/execution_traces \
     --output runs/ltr_multi_firm_eval.jsonl \
     --tag ltr_multi_firm_llm_v1
 # 输出：runs/ltr_multi_firm_eval.jsonl    每行一条 episode（含 rule_metrics / llm_aggregate）
-#       logs/ltr_multi_firm_eval.txt      每条 episode 的 episode_done 行（带 final_state_score）
+#       logs/negotiation_batch_YYYYMMDD_HHMMSS.log  每条 episode 的 episode_done 行（带 final_state_score）
+#       runs/execution_traces/<tag>_<runid>_<seq>.execution.json
+#       runs/execution_traces/<tag>_<runid>_<seq>.execution.transcript.txt  （同 stem，纯文本全量交互）
 
 # 4. （可选）省钱版：跳过终局 LLM 评测，只跑环境 + agents
-SOTOPIA_STORAGE_BACKEND=local PYTHONPATH=. python -m sotopia.cli.benchmark.negotiation_batch negotiation_batch \
+SOTOPIA_STORAGE_BACKEND=local PYTHONPATH=. python -m sotopia.cli.benchmark.negotiation_batch negotiation-batch \
     --agent-model gpt-4o-mini \
     --batch-size 3 --repeats 1 \
     --scenario-manifest ~/.sotopia/data/long_term_negotiation_llm_manifest.json \

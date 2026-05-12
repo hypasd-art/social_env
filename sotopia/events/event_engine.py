@@ -8,6 +8,24 @@ from typing import Any, Sequence
 from sotopia.state.system_state import SystemState
 
 
+def calendar_days_with_end_of_day_scripts(scripts: Sequence[Any]) -> set[int]:
+    """与 ``EventEngine.scripts_for_end_of_day`` 一致：哪些 ``calendar_day`` 至少有一条 **非 intraday** 脚本在日终触发。
+
+    用于校验或补齐「每个自然日至少一条 EventScript（EOD）」类约束。
+    """
+    days: set[int] = set()
+    for s in scripts:
+        if bool(getattr(s, "intraday", False)):
+            continue
+        apply_days = list(getattr(s, "apply_days", None) or [])
+        step = getattr(s, "step", None)
+        if apply_days:
+            days.update(int(x) for x in apply_days)
+        elif step is not None:
+            days.add(int(step))
+    return days
+
+
 @dataclass
 class EventEngineConfig:
     """控制事件管线；事件脚本为 duck-typing 对象（须有 ``intraday`` / ``apply_days`` / ``step`` / ``effects`` / ``pk``）。"""
@@ -77,4 +95,4 @@ class EventEngine:
         return triggered
 
 
-__all__ = ["EventEngine", "EventEngineConfig"]
+__all__ = ["EventEngine", "EventEngineConfig", "calendar_days_with_end_of_day_scripts"]

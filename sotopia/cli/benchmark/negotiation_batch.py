@@ -50,11 +50,19 @@
   ``sotopia.settings.long_term_negotiation.eval_logging.configure_negotiation_cli_logging``。
 
 控制台可执行入口见 ``python -m sotopia.cli.benchmark.negotiation_batch`` → `main()` → `app()`。
+若传入 ``--artifact-root``，则 **execution trace、model trace、默认 negotiation 文本日志**
+共用该根目录，并在其下按 ``{测试模型名}/{时间戳}/`` 嵌套（与分别传 ``--execution-trace-dir``
+``--model-trace-dir`` 且指向同一根目录等价；单模型时三者落在同一叶子文件夹）。
+
+若只传 ``--execution-trace-dir`` / ``--model-trace-dir``，默认同样在各自根下建
+``{测试模型名}/{时间戳}/``（``--trace-flat`` 可关闭）。每场除 ``*.execution.json`` 外还会写
+``*.execution.transcript.txt``（全量交互纯文本）。
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -150,6 +158,40 @@ def negotiation_batch(
             ),
         ),
     ] = None,
+    artifact_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--artifact-root",
+            help=(
+                "统一产物根目录：execution trace、model trace、默认 negotiation_batch.log "
+                "均写入其下 {测试模型名}/{时间戳}/（单模型时同一文件夹；与 --execution-trace-dir 等二选一优先本项）"
+            ),
+        ),
+    ] = None,
+    execution_trace_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--execution-trace-dir",
+            help=(
+                "每场 episode 写入 {tag}.execution.json 与同 stem 的 {tag}.execution.transcript.txt；"
+                "默认嵌套为 {根}/{测试模型名}/{时间戳}/（见 --trace-flat）；若已设 --artifact-root 则忽略"
+            ),
+        ),
+    ] = None,
+    model_trace_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--model-trace-dir",
+            help="每场 LLM trace JSONL 根目录；默认 {根}/{测试模型名}/{时间戳}/（见 --trace-flat）；若已设 --artifact-root 则忽略",
+        ),
+    ] = None,
+    trace_flat: Annotated[
+        bool,
+        typer.Option(
+            "--trace-flat",
+            help="不做 模型名/时间戳 子目录，直接把文件写入 --execution-trace-dir / --model-trace-dir 根路径",
+        ),
+    ] = False,
 ) -> None:
     """并行跑多组长期谈判 episode + 可选终局评测，输出 JSON 可聚合记录。
 
@@ -162,6 +204,8 @@ def negotiation_batch(
     )
     from sotopia.settings.long_term_negotiation.eval_logging import (
         configure_negotiation_cli_logging,
+        negotiation_batch_log_under_artifact_root,
+        negotiation_default_batch_log_file,
     )
     from sotopia.settings.long_term_negotiation.negotiation_run_config import (
         load_negotiation_run_config,
@@ -171,8 +215,45 @@ def negotiation_batch(
     )
 
     models = agent_models if agent_models is not None else ["gpt-4o-mini"]
-    configure_negotiation_cli_logging(verbose_console=print_logs, log_file=log_file)
+    run_started_dt = datetime.now()
+    run_started_at = run_started_dt.strftime("%Y-%m-%d %H:%M:%S")
+    ts = run_started_dt.strftime("%Y%m%d_%H%M%S")
+
+    eff_exec: Path | None = execution_trace_dir
+    eff_model: Path | None = model_trace_dir
+    if artifact_root is not None:
+        if execution_trace_dir is not None or model_trace_dir is not None:
+            typer.echo(
+                typer.style(
+                    "[negotiation-batch] --artifact-root set: ignoring --execution-trace-dir / --model-trace-dir.",
+                    fg=typer.colors.YELLOW,
+                ),
+                err=True,
+            )
+        eff_exec = artifact_root
+        eff_model = artifact_root
+
+    effective_log_file: Path
+    if log_file is None:
+        if artifact_root is not None:
+            effective_log_file = negotiation_batch_log_under_artifact_root(artifact_root, models, ts)
+        else:
+            effective_log_file = negotiation_default_batch_log_file(models, ts)
+    else:
+        lf = Path(log_file)
+        if str(lf).endswith("/") or (lf.suffix == "" and not lf.name.lower().endswith(".log")):
+            effective_log_file = lf / f"negotiation_batch_{ts}.log"
+        else:
+            effective_log_file = lf
+
+    configure_negotiation_cli_logging(verbose_console=print_logs, log_file=effective_log_file)
     tag_base = tag.strip() if tag.strip() else "negotiation_eval_batch"
+    typer.echo(
+        typer.style(
+            f"[negotiation-batch] run_started_at={run_started_at} log_file={effective_log_file}",
+            fg=typer.colors.CYAN,
+        )
+    )
 
     negotiation_run_cfg: dict[str, Any] | None = None
     if run_config is not None:
@@ -247,6 +328,10 @@ def negotiation_batch(
             run_terminal_llm_eval=not skip_llm_scoring,
             experiment_tag_base=tag_base,
             negotiation_run_config=negotiation_run_cfg,
+            execution_trace_dir=eff_exec,
+            model_trace_dir=eff_model,
+            nest_trace_dirs_by_model_time=not trace_flat,
+            run_timestamp=ts,
         )
     except Exception as exc:  # pragma: no cover
         typer.echo(typer.style(str(exc), fg=typer.colors.RED, bold=True), err=True)

@@ -1,6 +1,9 @@
 {
   "negotiation_agent": "negotiation_social_llm",
   "memory": {
-    "backend": "plain"
+    "backend": "plain",
+    "max_recent_chars": 12000,
+    "memory_max": 40,
+    "memory_inject_lines": 8
   }
 }

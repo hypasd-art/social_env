@@ -3,7 +3,8 @@
 
 1. 调 ``agenerate_env_profile`` 生成自然语言 ``scenario`` 与 ``agent_goals``（老 Sotopia 结构）。
 2. 合并 ``scenario_loader.build_negotiation_game_metadata_bundle`` —— timeline / lineup 与手写脚本同源，
-   便于 ``negotiation-batch --scenario-manifest`` 直接加载评测。
+   ``predefined_outcome_rule`` 默认再混入 ``secrets`` 随机熵（每条环境不同）；``--deterministic-outcome-rule``
+   时与手写脚本一样仅由 codename/阵容/场景文前缀决定种子。
 3. **AgentProfile**：**每合成一条环境**即合成并落库一套六角色 ``AgentProfile`` / ``AgentProfileV2``，再写入
    该环境的 ``EnvAgentComboStorage`` 与 V2 快照，与环境一一绑定。公司侧默认走 LLM、机构位静态；
    ``--agent-profiles-all-llm`` 六角色均 LLM；``--legacy-agent-profiles`` 为每环境手写占位画像。
@@ -61,6 +62,7 @@ import asyncio
 import importlib.util
 import json
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Any
@@ -109,22 +111,23 @@ def _load_handwritten_generator() -> Any:
 
 
 NEGOTIATION_LLM_PROMPTS: list[str] = [
-    "Multi-calendar-day M&A process: acquirer and target negotiate milestones, escrow, financing conditions, "
-    "and drafting sessions under slot-limited invitations.",
-    "Cross-border carve-out sale: seller and buyer align on transitional services, liabilities, regulator filings, "
-    "and phased payments across several business weeks.",
-    "Distressed refinancing with competing investors: debtor firm negotiates interest, covenants, and "
-    "contingent capital tranches alongside an approval-heavy timeline.",
-    "Three-firm consortium acquisition: lead acquirer, co-bidder firm, and target negotiate joint scope, "
-    "purchase-price allocation, and post-close governance across multi-day formal sessions.",
-    "Four-firm carve-out auction: two bidder firms (firm_a / firm_c) compete for two carve-out segments "
-    "from a parent group (firm_b / firm_d), with paced formal moves and stalking-horse dynamics.",
+    "Morning wet-market procurement: an individual household buyer negotiates with multiple produce stall owners "
+    "across several days. Rival sellers quote overlapping baskets; customers choose by total value "
+    "(price, freshness, delivery slot, refund promise).",
+    "Neighborhood cafe supply cooperation: independent operators bargain over beans, milk, and pastry batches. "
+    "At least two sellers chase the same repeat clients, and each round must reference concrete competitive offers.",
+    "Community canteen material purchase: buyer-side organizer compares two or more personal vendors for rice, oil, "
+    "and vegetables; financing support may appear only when cashflow gaps threaten fulfillment.",
+    "Three-person street-commerce rivalry: firm_a (buyer lead), firm_b (incumbent vendor), firm_c (challenger vendor) "
+    "negotiate bundles while competing for identical customer segments and reputation.",
+    "Four-person market-lane competition: firm_a/firms choose among firm_b/firm_c/firm_d style offers where "
+    "multiple individuals run similar businesses and the customer commits to the best comprehensive plan.",
 ]
 
 _LLM_MODE_TO_LINEUP_N: dict[str, tuple[str, int]] = {
-    "bilat": (NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, 2),
-    "tri": (NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, 3),
-    "quartet": (NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, 4),
+    "bilat": (NEGOTIATION_LINEUP_FIRMS_ONLY, 2),
+    "tri": (NEGOTIATION_LINEUP_FIRMS_ONLY, 3),
+    "quartet": (NEGOTIATION_LINEUP_FIRMS_ONLY, 4),
     "firms3": (NEGOTIATION_LINEUP_FIRMS_ONLY, 3),
     "firms4": (NEGOTIATION_LINEUP_FIRMS_ONLY, 4),
 }
@@ -133,7 +136,7 @@ _LLM_MODE_TO_LINEUP_N: dict[str, tuple[str, int]] = {
 def modes_cycle_from_arg(s: str) -> list[str]:
     """与 ``--modes`` 字符串顺序一致，对每条 LLM profile 轮转（合法 token 同手写脚本）。"""
     allow = frozenset(_LLM_MODE_TO_LINEUP_N)
-    return [p.strip().lower() for p in s.split(",") if p.strip().lower() in allow] or ["bilat"]
+    return [p.strip().lower() for p in s.split(",") if p.strip().lower() in allow] or ["firms3"]
 
 
 def parse_mode_counts(spec: str) -> list[str] | None:
@@ -399,9 +402,7 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
         print("[agent_profiles] mode=handwritten per-environment (legacy constants)")
         agent_profile_source = "handwritten"
     else:
-        llm_roles_for_agents = (
-            tuple(ltr.QUARTET_ROSTER_ORDER) if args.agent_profiles_all_llm else DEFAULT_COMPANY_LLM_ROLES
-        )
+        llm_roles_for_agents = tuple(DEFAULT_COMPANY_LLM_ROLES)
         print(
             f"[agent_profiles] mode=llm per-environment companies_only={not args.agent_profiles_all_llm} "
             f"model={agent_profile_model} llm_roles={list(llm_roles_for_agents)}"
@@ -440,6 +441,9 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
         variant_i += 1
 
         codename = f"ltr_llm_{args.tag}_{label}_{mode}_i{idx}"
+        outcome_rule_entropy: str | None = None
+        if not args.deterministic_outcome_rule:
+            outcome_rule_entropy = secrets.token_hex(16)
         gm = build_negotiation_game_metadata_bundle(
             codename,
             quartet_eff,
@@ -447,7 +451,31 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
             num_participants=n_agents,
             lineup=lineup,
             scenario_text=str(getattr(env_llm, "scenario", "") or ""),
+            outcome_rule_entropy=outcome_rule_entropy,
         )
+        active_roles = _roles_for_mode(mode)
+        gm["social_graph"] = {
+            "nodes": [
+                {
+                    "role": r,
+                    "summary": ltr.ROLE_SUMMARY_EN.get(r, r),
+                    "background_story": ltr._persona_for_role(r).get("background_story", ""),
+                    "personality": ltr._persona_for_role(r).get("personality", ""),
+                    "dialogue_voice": ltr._persona_for_role(r).get("dialogue_voice", ""),
+                    "core_skills": list(ltr._persona_for_role(r).get("core_skills", [])),
+                }
+                for r in active_roles
+            ],
+            "edges": ltr._social_graph_edges(active_roles),
+        }
+        gm["agent_survival_constraints"] = {
+            r: {
+                "daily_fixed_cost": float(ltr._persona_for_role(r).get("daily_fixed_cost", 0.0) or 0.0),
+                "short_term_debt_due": float(ltr._persona_for_role(r).get("short_term_debt_due", 0.0) or 0.0),
+                "achievement_motivation": str(ltr._persona_for_role(r).get("achievement_motivation", "") or ""),
+            }
+            for r in active_roles
+        }
 
         merged_gm = {**(dict(env_llm.game_metadata) if isinstance(env_llm.game_metadata, dict) else {}), **gm}
         env_llm.game_metadata = merged_gm
@@ -475,26 +503,27 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
 
         agent_bind_tag = f"{args.tag}__{codename}"
         if args.legacy_agent_profiles:
-            agents = ltr.save_negotiation_agents(tag=agent_bind_tag)
+            agents = ltr.save_negotiation_agents(tag=agent_bind_tag, roles=active_roles)
         else:
             assert llm_roles_for_agents is not None
+            llm_roles_active = tuple(r for r in llm_roles_for_agents if r in set(active_roles))
             agents = await agenerate_negotiation_agent_profiles(
-                roles=ltr.QUARTET_ROSTER_ORDER,
+                roles=active_roles,
                 model_name=agent_profile_model,
                 tag=agent_bind_tag,
                 concurrency=max(1, args.concurrency),
                 save_to_storage=True,
-                llm_roles=llm_roles_for_agents,
+                llm_roles=llm_roles_active,
             )
-        ltr.pairwise_strangers(agents, tag=agent_bind_tag)
-        v2_agents = ltr.save_negotiation_agent_profiles_v2(agents, tag=agent_bind_tag)
+        ltr.pairwise_strangers(agents, tag=agent_bind_tag, roles=active_roles)
+        v2_agents = ltr.save_negotiation_agent_profiles_v2(agents, tag=agent_bind_tag, roles=active_roles)
 
         roles = _roles_for_mode(mode)
         combo = ltr.save_combo(env_llm, roles, agents)
         combos_by_codename[codename] = combo
         legacy_env_objs.append(env_llm)
-        env_agent_pks_by_codename[codename] = {r: agents[r].pk for r in ltr.QUARTET_ROSTER_ORDER}
-        env_agent_v2_pks_by_codename[codename] = {r: v2_agents[r].pk for r in ltr.QUARTET_ROSTER_ORDER}
+        env_agent_pks_by_codename[codename] = {r: agents[r].pk for r in active_roles}
+        env_agent_v2_pks_by_codename[codename] = {r: v2_agents[r].pk for r in active_roles}
 
         profile_rows = [
             agent_profile_to_jsonable(
@@ -506,7 +535,7 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
                     else ("llm" if r in llm_role_set else "static")
                 ),
             )
-            for r in ltr.QUARTET_ROSTER_ORDER
+            for r in active_roles
         ]
         per_environment_agent_export_rows.append(
             {
@@ -561,7 +590,7 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
         "agent_profile_model": agent_profile_model,
         "agent_profile_source": agent_profile_source,
         "agent_profile_export_path": str(agent_profile_path) if agent_profile_path else None,
-        "agent_roles": list(ltr.QUARTET_ROSTER_ORDER),
+        "agent_roles": list(SESSION_FIRMS_ONLY_ROLE_ORDER),
         "agent_profiles_binding": "per_environment",
         "environments": [
             {
@@ -671,6 +700,14 @@ def main() -> int:
         "--legacy-agent-profiles",
         action="store_true",
         help="不调 LLM，沿用 generate_long_term_negotiation_scenarios.save_negotiation_agents 的常量画像",
+    )
+    ap.add_argument(
+        "--deterministic-outcome-rule",
+        action="store_true",
+        help=(
+            "predefined_outcome_rule 的种子不混入额外随机串，仅依赖 codename/阵容/人数/场景文前缀"
+            "（与手写 generate_long_term_negotiation_scenarios 一致，便于复现）。默认关闭。"
+        ),
     )
     args = ap.parse_args()
 

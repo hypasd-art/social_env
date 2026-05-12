@@ -3,7 +3,8 @@
 ``NegotiationWorldController`` 已在 ``Observation.last_turn`` 中写明各阶段 JSON 形态；本类通过
 ``custom_template`` 与 ``{action_instructions}`` 强调：在 ``action_type="action"`` 时
 ``argument`` 必须是可解析的结构化对象（``negotiation_op`` / ``verb`` / ``terms`` 等），
-与 ``agenerate_action(..., structured_output=True)`` 对齐。
+与 ``agenerate_action(..., structured_output=True)`` 对齐。静态模板另说明如何从 **goal** 读取
+**对话风格、本人画像、与他人关系**（与 ``llm_evaluation`` 注入的块一致）。
 
 推荐导入（避免在仅加载规则 agent 的路径上引入本模块）::
 
@@ -25,7 +26,7 @@ from sotopia.agents.social_agent import SocialLLMAgent
 from sotopia.generation_utils.generate import agenerate_action, agenerate_goal, fill_template
 from sotopia.messages import AgentAction, Observation
 
-from .roles import ROLE_SUMMARY_EN
+from .roles import ROLE_PERSONA_EN, ROLE_SUMMARY_EN
 
 # 与 ``agenerate_action`` 默认模板变量一致：由 ``agenerate`` 注入 goal / format_instructions 等。
 NEGOTIATION_LLM_CUSTOM_TEMPLATE = """
@@ -34,9 +35,30 @@ You are **{agent}** in a **long-horizon business negotiation** simulator (multi-
 ## Priority (read in order)
 1. **Latest Environment turn** in the history below: it states the current phase (scheduling vs active session),
    allowed moves, and often **literal JSON examples** for this step. Treat that text as authoritative.
-2. **Your private goal** appears under "Here is the context of the interaction" / goal lines — only you see your side's goal text.
+2. **Your private ``goal``** (also echoed as "Here is the context of the interaction" / goal lines in the action prompt):
+   only you see it. It normally carries **[persona]** (background, personality, **DialogueVoice**, skills, pressures),
+   and—when the episode is bound to stored profiles—blocks such as **[display_names]**,
+   **[AgentProfile — natural language style]**, **[AgentProfileV2]** (initial snapshot text), and
+   **[RelationshipProfile related to you]** toward specific peers. Use these for **who you are** and **how you relate**
+   in ``speak``; they must **not** override Environment rules or live ``[system]`` state.
 3. **Role & roster hints** (supplement only; do not contradict the Environment):
 {action_instructions}
+
+## Information visibility (initial & ongoing)
+- The **`[system]`** digest line and any **``[contracts_visible_to_you]``** block reflect **your** view only
+  (your resources/reputation/trust edges, contracts you may read, session history visible to you).
+- **``[other_participants_public_role]``** lists **protocol-visible** one-line roles for other roster members
+  (who they are in the simulator). It is **not** their private cash, thresholds, or undisclosed instructions;
+  do not invent those unless the Environment or in-session messages reveal them.
+
+## Persona, dialogue voice, and relationships (use your **goal** + this turn's blocks)
+- **Dialogue style:** Follow **``DialogueVoice``** / voice lines inside **[persona]** in your ``goal``: register (formal/casual/street-fast, etc.),
+  pacing, typical openers or hedges, humor boundaries, and what to avoid—so your ``speak`` lines sound **recognizably you**
+  and **not** interchangeable with another roster member. Keep each ``speak`` turn short.
+- **Self / biography:** **[persona]** and any **[AgentProfile …]** / **[AgentProfileV2]** snippets in ``goal`` summarize your background, pressures, and **declared** initial resource snapshot text—use for motivation and wording; **live cash/resources** still come from the Environment ``[system]`` digest as the episode evolves.
+- **Ties to others:** **[RelationshipProfile related to you]** and **[display_names]** map peers to history + human names.
+  Let rivalry, trust, or caution **color tone** in natural language; do **not** treat relationship text as proof of
+  undisclosed numbers or secret goals unless the session or Environment reveals them.
 
 ## Action types (must pick one of ``{action_list}`` for this turn)
 - **speak** — In-session natural language; ``argument`` = short dialogue string (no JSON).
@@ -52,6 +74,10 @@ You are **{agent}** in a **long-horizon business negotiation** simulator (multi-
 
 ## Behaviour
 Stay in character, pursue your goal, and keep dialogue concise and non-repetitive relative to other participants' lines.
+- Apply **Persona, dialogue voice, and relationships** above together with your private ``goal`` on every turn.
+- In **natural-language dialogue** (``speak``), prefer human display names from context (e.g. ``[display_names]`` in ``goal``),
+  rather than canonical ids like ``firm_a``.
+- In **structured JSON actions**, still use canonical ids exactly as required by the protocol (``firm_a``/``firm_b``...).
 
 --- Interaction history (newest relevant context is near the end) ---
 {history}
@@ -82,16 +108,40 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
         self._role_goal_addon = role_goal_addon
         self._negotiation_prompt_template = tpl
 
+    def _peer_public_role_block(self) -> str:
+        """其他 roster 成员在设计里**对全员公开**的角色一句话（非私密数值/目标）。"""
+        names = self._all_participant_names
+        if not names:
+            return ""
+        lines: list[str] = []
+        for n in names:
+            if n == self.agent_name:
+                continue
+            desc = ROLE_SUMMARY_EN.get(n, n)
+            lines.append(f"  - {n}: {desc}")
+        if not lines:
+            return ""
+        return "[other_participants_public_role]\n" + "\n".join(lines)
+
     def _action_instruction_block(self, obs: Observation) -> str:
         role_line = ROLE_SUMMARY_EN.get(self.agent_name, self.agent_name)
         extra = self._role_goal_addon.strip()
         parts = [
             f"- Your canonical id: {self.agent_name!r} (use this exact token when the protocol names actors).",
-            f"- Role summary: {role_line}",
+            f"- Role summary (your side): {role_line}",
         ]
         if self._all_participant_names:
             roster = ", ".join(repr(n) for n in self._all_participant_names)
             parts.append(f"- Episode roster (canonical participants): {roster}")
+        parts.append(
+            "- **Persona / DialogueVoice / relationships:** full detail is in your private **goal** "
+            "(e.g. ``[persona]``, ``DialogueVoice=…``, ``[Loaded profile+relationship context]``, "
+            "``[RelationshipProfile related to you]``, ``[display_names]`` when present). "
+            "Use them for spoken style and stance toward peers; live resources remain in the Environment digest."
+        )
+        peer = self._peer_public_role_block()
+        if peer:
+            parts.append(peer)
         if extra:
             parts.append(f"- Scenario-specific goal / constraints: {extra}")
         if obs.action_instruction.strip():
@@ -105,9 +155,17 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
         self.recv_message("Environment", obs)
 
         if self._goal is None:
+            obs_nl = self.inbox[0][1].to_natural_language()
+            viewer_ctx = self._action_instruction_block(obs)
             self._goal = await agenerate_goal(
                 self.model_name,
-                background=self.inbox[0][1].to_natural_language(),
+                background=(
+                    f"{obs_nl}\n\n"
+                    "[Viewer-specific protocol context — scheduling/session text above is for you only; "
+                    "the block below adds your id, roster, **public** one-line roles of others, and a pointer to "
+                    "**persona / DialogueVoice / relationship** text in your private goal.]\n"
+                    f"{viewer_ctx}"
+                ),
                 agent=self.agent_name,
             )
 
@@ -187,12 +245,31 @@ def build_negotiation_social_llm_agents(
             **mem_kw,
         )
         summary = ROLE_SUMMARY_EN.get(role, role)
+        persona = dict(ROLE_PERSONA_EN.get(role, {}))
+        voice = str(persona.get("dialogue_voice", "") or "").strip()
+        chunks = [
+            f"Background={persona.get('background_story', '')}",
+            f"Personality={persona.get('personality', '')}",
+        ]
+        if voice:
+            chunks.append(f"DialogueVoice={voice}")
+        chunks.extend(
+            [
+                f"CoreSkills={','.join(str(x) for x in (persona.get('core_skills') or []))}",
+                f"SurvivalPressure={persona.get('survival_pressure', '')}",
+                f"AchievementMotivation={persona.get('achievement_motivation', '')}",
+            ]
+        )
+        persona_line = "; ".join(chunks)
         ag.goal = (
             f"[{role}] {summary}\n"
+            f"[persona] {persona_line}\n"
             "Operate strictly inside the simulator protocol: each turn, read the latest Environment "
             "message for allowed action types and JSON shapes; when you use ``action``, the ``argument`` "
             "must be a JSON object matching that message (never a quoted JSON string or markdown). "
-            "Advance your interests without breaking calendar/session rules or inventing negotiation_op names."
+            "Advance your interests without breaking calendar/session rules or inventing negotiation_op names. "
+            "Treat other parties' private numbers and goals as unknown unless the Environment shows them "
+            "under your visibility (e.g. ``[contracts_visible_to_you]`` or in-session speech)."
         )
         agents[role] = ag
     return agents
