@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sotopia.utils import truncate_chars
+
 log = logging.getLogger(__name__)
 
 DEFAULT_SUMMARY_SYSTEM_PROMPT = (
@@ -21,18 +23,6 @@ DEFAULT_SUMMARY_USER_TEMPLATE = (
     "{conversation_history}\n\n"
     "请提供简短总结："
 )
-
-
-def truncate_chars(text: str, max_chars: int, *, head_ratio: float = 0.6) -> str:
-    """按字符数截断，保留开头与一小段尾部（无 LLM 时的回退）。"""
-    if max_chars <= 0 or len(text) <= max_chars:
-        return text
-    head_n = max(1, int(max_chars * head_ratio) - 32)
-    tail_n = max(0, max_chars - head_n - 32)
-    head = text[:head_n]
-    tail = text[-tail_n:] if tail_n else ""
-    sep = "\n… [truncated] …\n"
-    return head + sep + tail
 
 
 async def summarize_conversation_text(

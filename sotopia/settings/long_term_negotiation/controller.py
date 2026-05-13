@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
 from sotopia.messages.message_classes import Observation
@@ -30,6 +31,10 @@ def remaining_days(day: int, D: int) -> int:
     return max(0, D - day + 1)
 
 
+def _norm_display_token_key(s: str) -> str:
+    return " ".join(str(s).strip().split()).lower()
+
+
 class NegotiationWorldController:
     """状态机 + 合同簿 + 每 slot 的 invites/responses/sessions。"""
 
@@ -37,11 +42,22 @@ class NegotiationWorldController:
         self,
         agent_names: tuple[str, ...],
         params: NegotiationTimelineParams | None = None,
+        agent_display_names: Mapping[str, str] | None = None,
     ) -> None:
         if len(agent_names) < 2:
             raise ValueError("Need at least two agents for the negotiation world.")
         self.agent_names = tuple(agent_names)
         self.params = params or NegotiationTimelineParams()
+        from .roles import default_display_name_for_role
+
+        overlay = dict(agent_display_names or {})
+        self._agent_display_names: dict[str, str] = {
+            n: str(overlay.get(n) or default_display_name_for_role(n)) for n in self.agent_names
+        }
+        self._token_to_canonical: dict[str, str] = {}
+        for aid in self.agent_names:
+            self._token_to_canonical[_norm_display_token_key(aid)] = aid
+            self._token_to_canonical[_norm_display_token_key(self._agent_display_names[aid])] = aid
         self.phase: Phase = Phase.INIT
         self.day: int = 1
         self.slot: int = 1
@@ -105,10 +121,52 @@ class NegotiationWorldController:
         self._progress_flag_this_calendar_day: bool = False
         self._consecutive_idle_calendar_days: int = 0
 
+    def display_name_for(self, agent_id: str) -> str:
+        """人名展示（观测 / 日志）；结构化状态仍存 canonical id。"""
+        return self._agent_display_names.get(agent_id, agent_id)
+
+    def format_participant_list_nl(self, ids: Iterable[str]) -> str:
+        seq = sorted({str(x) for x in ids})
+        return ", ".join(self.display_name_for(x) for x in seq)
+
+    def resolve_actor_token(self, token: str) -> str:
+        """将 JSON 中的人名或 canonical id 解析为内部 roster 键（未知则原样返回）。"""
+        k = _norm_display_token_key(token)
+        return self._token_to_canonical.get(k, str(token).strip())
+
+    def normalize_negotiation_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """把模型输出的 action JSON 中的参与者字符串统一为 canonical id。"""
+        p = dict(payload)
+        op = p.get("negotiation_op")
+        if op == "session_request":
+            pp = p.get("proposed_participants")
+            if isinstance(pp, list):
+                p["proposed_participants"] = [self.resolve_actor_token(str(x)) for x in pp]
+        elif op == "session_response" and "requester" in p:
+            p["requester"] = self.resolve_actor_token(str(p["requester"]))
+        elif op == "session_response_batch":
+            batch_key = "responses" if isinstance(p.get("responses"), list) else "items"
+            raw = p.get(batch_key)
+            if isinstance(raw, list):
+                new_list: list[Any] = []
+                for it in raw:
+                    if isinstance(it, dict):
+                        it2 = dict(it)
+                        if "requester" in it2:
+                            it2["requester"] = self.resolve_actor_token(str(it2["requester"]))
+                        new_list.append(it2)
+                    else:
+                        new_list.append(it)
+                p[batch_key] = new_list
+        elif op == "formal" and str(p.get("verb") or "") == "contract_share" and "receiver" in p:
+            p["receiver"] = self.resolve_actor_token(str(p["receiver"]))
+        return p
+
     def reset(self) -> None:
         agent_names = self.agent_names
         params = self.params
-        self.__init__(agent_names, params)
+        disp = dict(self._agent_display_names)
+        self.__init__(agent_names, params, agent_display_names=disp)
 
     def start_episode(self) -> None:
         self.day = 1
@@ -432,7 +490,7 @@ class NegotiationWorldController:
         self.session_log.append(entry)
 
         for sid, agent, content, viewers in self._transcript:
-            line = f"[d={self.day} k={self.slot} sid={sid}] {agent}: {content}"
+            line = f"[d={self.day} k={self.slot} sid={sid}] {self.display_name_for(agent)}: {content}"
             for v in viewers:
                 self.visible_history.setdefault(v, []).append(line)
         self._transcript.clear()
@@ -470,7 +528,8 @@ class NegotiationWorldController:
                 continue
             price = c.terms.get("price", "?")
             contract_lines.append(
-                f"  {cid} parent={c.parent_id!r} status={c.status!r} parties={sorted(c.parties)!r} "
+                f"  {cid} parent={c.parent_id!r} status={c.status!r} "
+                f"parties={self.format_participant_list_nl(c.parties)} "
                 f"accept={dict(c.acceptances)!r} price={price!r} "
                 f"financing={c.financing!r} regulatory={c.regulatory!r}"
             )
@@ -493,17 +552,27 @@ class NegotiationWorldController:
     def observation_for_scheduling_invite(self, viewer: str, system_digest: str) -> Observation:
         prior = (self._last_scheduling_digest.get(viewer) or "").strip()
         pre = f"[Previous slot — your scheduling outcome]\n{prior}\n\n" if prior else ""
+        ex_req = json.dumps(
+            {
+                "negotiation_op": "session_request",
+                "proposed_participants": [self.display_name_for(a) for a in self.agent_names],
+                "purpose": "Discuss terms for the next delivery window.",
+            },
+            ensure_ascii=False,
+        )
         text = (
             f"{pre}"
             "Scheduling — Invitation round.\n"
-            "Submit ONE session request using action_type='action' and JSON in argument:\n"
-            '{"negotiation_op":"session_request","proposed_participants":["..."],"purpose":"..."}\n'
+            "Submit ONE session request using action_type='action' and JSON in argument, for example:\n"
+            f"{ex_req}\n"
             'Or pass: {"negotiation_op":"sched_pass"} to skip inviting this slot.\n'
             "Rules (design §3.1): Q_i=1 — at most ONE session_request per slot; if your request fails, "
             "do not invite a different roster in the same slot (wait for a later slot).\n"
             "Design §6: scheduling JSON does not consume daily formal-action budget (F_max).\n"
             "`purpose` describes the meeting topic only, not binding price/deal terms.\n"
-            f"Your name: {viewer}. Roster ids you may reference: {list(self.agent_names)}.\n"
+            f"Your name in this episode: {self.display_name_for(viewer)}. "
+            f"Everyone in this episode: {self.format_participant_list_nl(self.agent_names)}.\n"
+            "Use these personal names as strings inside JSON (including yourself if you schedule a session).\n"
         )
         return Observation(
             last_turn=text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest),
@@ -520,19 +589,38 @@ class NegotiationWorldController:
         if pend:
             for p in pend:
                 header_lines.append(
-                    f"  - requester={p.requester} "
-                    f"participants={sorted(p.proposed_participants)} "
+                    f"  - requester={self.display_name_for(p.requester)} "
+                    f"participants={self.format_participant_list_nl(p.proposed_participants)} "
                     f"purpose={p.purpose!r}"
                 )
         else:
             header_lines.append("  (none)")
+        a0 = self.agent_names[0]
+        a1 = self.agent_names[1] if len(self.agent_names) > 1 else self.agent_names[0]
+        ex_single = json.dumps(
+            {
+                "negotiation_op": "session_response",
+                "requester": self.display_name_for(a0),
+                "accept": True,
+            },
+            ensure_ascii=False,
+        )
+        ex_batch = json.dumps(
+            {
+                "negotiation_op": "session_response_batch",
+                "responses": [
+                    {"requester": self.display_name_for(a0), "accept": True},
+                    {"requester": self.display_name_for(a1), "accept": False},
+                ],
+            },
+            ensure_ascii=False,
+        )
         header_lines.extend(
             [
-                "Respond via action_type='action'. Single invite:",
-                '{"negotiation_op":"session_response","requester":"<name>","accept":true|false}',
-                "Multiple invites in ONE tool call (design §3.3):",
-                '{"negotiation_op":"session_response_batch","responses":['
-                '{"requester":"<a>","accept":true},{"requester":"<b>","accept":false}]}',
+                "Respond via action_type='action'. Single invite example:",
+                ex_single,
+                "Multiple invites in ONE tool call (design §3.3), example:",
+                ex_batch,
                 "Rules: unknown/missing/unparseable → treated as decline; you may accept at most ONE invitation "
                 "that targets you — otherwise all your accepts become ineffective this slot.",
                 'If nothing to submit: {"negotiation_op":"sched_pass"}.',
@@ -583,15 +671,16 @@ class NegotiationWorldController:
             f"M_max(messages)=see max_natural_turns_per_agent_per_session in bookkeeping.\n"
         )
         rk = classify_session_roster(sess.participants)
-        s7 = section7_session_hints(rk, viewer=viewer)
+        s7 = section7_session_hints(rk, viewer=self.display_name_for(viewer))
         text = (
-            f"Active session {sess.session_id} with {list(sess.participants)}.\n"
-            f"Others: {others}.\n"
+            f"Active session {sess.session_id} with {self.format_participant_list_nl(sess.participants)}.\n"
+            f"Others in this session: {self.format_participant_list_nl(others)}.\n"
             + budgets
             + s7
             + "\n"
             + "Use natural language with action_type='speak',\n"
-            "or structured formal/session_control via action_type='action' with JSON:\n"
+            "or structured formal/session_control via action_type='action' with JSON "
+            "(use the same personal names as in scheduling JSON for any `receiver` field):\n"
             "§5 contract (reference only if you are in visibility_set):\n"
             "- propose: "
             '{"negotiation_op":"formal","verb":"propose_contract","terms":{"price": number, '
@@ -609,7 +698,7 @@ class NegotiationWorldController:
             '- regulatory review ⇒ add regulator to visibility: '
             '{"negotiation_op":"formal","verb":"request_regulatory_review","contract_id":"optional"}\n'
             '- share to current-session participant: '
-            '{"negotiation_op":"formal","verb":"contract_share","contract_id":"...","receiver":"<name>"}\n'
+            '{"negotiation_op":"formal","verb":"contract_share","contract_id":"...","receiver":"<their personal name>"}\n'
             '- sign after mutual principal accept: '
             '{"negotiation_op":"formal","verb":"sign","contract_id":"optional"}\n'
             '- investor financing commit or decline (visible contract): '
@@ -748,6 +837,7 @@ class NegotiationWorldController:
 
     def submit_scheduling_response_payload(self, agent: str, payload: dict[str, Any]) -> str:
         """§3.3 — 支持单笔或 ``session_response_batch``。"""
+        payload = self.normalize_negotiation_payload(dict(payload))
         if self.terminal or self.phase == Phase.TERMINATED:
             return "ignored: world_terminal"
         if self.phase != Phase.SCHEDULE_RESPONSE:
@@ -839,7 +929,9 @@ class NegotiationWorldController:
                         desc = "All ACCEPTED — request not instantiated (consult resolution trace)."
                 else:
                     desc = "NOT scheduled — insufficient acceptances (effective decline/no_response)."
-                lines.append(f"- Your invite → {sorted(fp)}: {desc} purpose_note={inv.purpose!r}")
+                lines.append(
+                    f"- Your invite → {self.format_participant_list_nl(fp)}: {desc} purpose_note={inv.purpose!r}"
+                )
 
             for inv in sorted(self._invites.values(), key=lambda r: r.requester):
                 if viewer == inv.requester:
@@ -849,16 +941,19 @@ class NegotiationWorldController:
                 key = self._invite_tuple_key(inv)
                 eff_accept = bool(self._responses.setdefault(key, {}).get(viewer, False))
                 lines.append(
-                    f"- Request from `{inv.requester}` with roster {sorted(inv.proposed_participants)}: "
+                    f"- Request from {self.display_name_for(inv.requester)!r} with roster "
+                    f"{self.format_participant_list_nl(inv.proposed_participants)}: "
                     f"effective_response={'accept' if eff_accept else 'decline_or_no_response'}"
                 )
 
             if viewer in entered_agents:
-                my_rosters = [sorted(g) for g in finals_tuple if viewer in g]
+                my_rosters = [g for g in finals_tuple if viewer in g]
                 if my_rosters:
+                    clusters = [self.format_participant_list_nl(g) for g in my_rosters]
                     lines.append(
                         "- You ENTER a negotiating session this slot — your roster cluster(s): "
-                        f"{my_rosters!r}."
+                        + "; ".join(f"({c})" for c in clusters)
+                        + "."
                     )
             else:
                 lines.append(
@@ -884,6 +979,7 @@ class NegotiationWorldController:
             return "ignored: world_terminal"
         if self.phase != Phase.SCHEDULE_INVITE:
             return "ignored: wrong phase"
+        payload = self.normalize_negotiation_payload(dict(payload))
         op = payload.get("negotiation_op")
         if op == "sched_pass":
             return "pass"
@@ -1164,6 +1260,7 @@ class NegotiationWorldController:
         *,
         resources_snapshot: Callable[[], dict[str, dict[str, float]]],
     ) -> None:
+        payload = self.normalize_negotiation_payload(dict(payload))
         op_any = payload.get("negotiation_op")
         op = str(op_any) if op_any is not None else ""
         sess = self._current_session()
@@ -1503,7 +1600,7 @@ class NegotiationWorldController:
         )
         self.record_execution_event(
             "contract_proposed",
-            f"合同草案已提出（contract_id={cid}，发起方={agent}）",
+            f"合同草案已提出（contract_id={cid}，发起方={self.display_name_for(agent)}）",
             contract_id=cid,
             agent=agent,
             status="proposed",
@@ -1569,7 +1666,7 @@ class NegotiationWorldController:
         )
         self.record_execution_event(
             "contract_accept",
-            f"主体方 {agent} 接受合同条款（contract_id={cid}，当前状态={c.status!r}）",
+            f"主体方 {self.display_name_for(agent)} 接受合同条款（contract_id={cid}，当前状态={c.status!r}）",
             contract_id=cid,
             agent=agent,
             status_after=c.status,
@@ -1983,7 +2080,7 @@ class NegotiationWorldController:
         )
         self.record_execution_event(
             "contract_sign_partial",
-            f"主体方 {agent} 完成签署（contract_id={cid}；是否全员签满视融资/监管条件）",
+            f"主体方 {self.display_name_for(agent)} 完成签署（contract_id={cid}；是否全员签满视融资/监管条件）",
             contract_id=cid,
             agent=agent,
         )

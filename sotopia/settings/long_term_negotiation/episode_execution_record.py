@@ -6,6 +6,11 @@
 （环境侧累积的全部 Environment / 各 agent 行动）及调度、会话、可见历史等；若同时开启
 ``model_trace_dir`` 且传入与 trace 一致的 stem，则合并 **逐次 LLM 调用的完整输入与原始输出**
 （``llm_model_traces`` / transcript §8）。
+
+另：默认再为 **每个参与者** 写入 ``{tag}_{<agent>}.agent_episode.json``，将 **该 agent 视角下的
+执行轨迹子集**（Environment 广播、本人发出条、可见历史、本人 action/message/调度行）与
+**该 agent 的全部 LLM 调用记录**（与 ``model_trace`` 中同字段一致的全量输入输出）合并到 **同一文件**，
+便于按角色单文件复盘。
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from .env import LongTermNegotiationEnv
 
 __all__ = [
     "build_episode_execution_record",
+    "build_per_agent_episode_bundle",
     "format_episode_interaction_transcript",
     "safe_execution_trace_filename",
     "transcript_path_for_execution_json",
@@ -69,6 +75,89 @@ def _serialize_messenger_inbox(env: LongTermNegotiationEnv) -> list[dict[str, An
             }
         )
     return rows
+
+
+def _execution_json_tag(path: Path) -> str:
+    """``foo.execution.json`` → ``foo``。"""
+    name = path.name
+    if name.endswith(".execution.json"):
+        return name[: -len(".execution.json")]
+    return path.stem
+
+
+def _serialize_messenger_inbox_for_agent(env: LongTermNegotiationEnv, agent: str) -> list[dict[str, Any]]:
+    """时间线子集：Environment 广播 + 该 agent 作为 source 的发送记录。"""
+    out: list[dict[str, Any]] = []
+    for row in _serialize_messenger_inbox(env):
+        src = str(row.get("source", ""))
+        if src == agent or src == "Environment":
+            out.append(row)
+    return out
+
+
+def build_per_agent_episode_bundle(
+    agent: str,
+    env: LongTermNegotiationEnv,
+    llm_model_traces: Sequence[dict[str, Any]] | None,
+    *,
+    episode_tag: str,
+) -> dict[str, Any]:
+    """单角色 **执行轨迹 + 全量 LLM 输入输出** 合一结构（写入 ``*.agent_episode.json``）。"""
+    ctrl = env.ctrl
+    vh_full = _visible_history_full(ctrl)
+    actions = [
+        r for r in (getattr(ctrl, "action_log", []) or []) if str(r.get("agent", "")) == agent
+    ]
+    messages = [
+        r for r in (getattr(ctrl, "message_log", []) or []) if str(r.get("agent", "")) == agent
+    ]
+    sched: list[Any] = []
+    for t in getattr(ctrl, "scheduling_log", []) or []:
+        if isinstance(t, (list, tuple)) and len(t) >= 3 and str(t[2]) == agent:
+            sched.append(_tupleize_scheduling(t))
+
+    llm_for: list[dict[str, Any]] = []
+    if llm_model_traces:
+        for row in llm_model_traces:
+            if str(row.get("trace_agent") or "") == agent:
+                llm_for.append(dict(row))
+        llm_for.sort(key=lambda r: int(r.get("step_index", 0) or 0))
+
+    return {
+        "schema": "sotopia.long_term_negotiation.per_agent_episode_bundle.v1",
+        "episode_tag": episode_tag,
+        "agent": agent,
+        "execution": {
+            "messenger_inbox_subset": _serialize_messenger_inbox_for_agent(env, agent),
+            "visible_history": list(vh_full.get(agent, [])),
+            "action_log": actions,
+            "message_log": messages,
+            "scheduling_log": sched,
+        },
+        "llm_model_traces": llm_for,
+    }
+
+
+def _write_per_agent_episode_bundles(
+    env: LongTermNegotiationEnv,
+    execution_json_path: Path,
+    llm_model_traces: Sequence[dict[str, Any]] | None,
+    *,
+    episode_tag: str,
+) -> list[Path]:
+    from .model_trace import sanitize_trace_segment
+
+    written: list[Path] = []
+    parent = execution_json_path.parent
+    for agent in sorted(env.agents.keys()):
+        safe = sanitize_trace_segment(agent)
+        bundle = build_per_agent_episode_bundle(
+            agent, env, llm_model_traces, episode_tag=episode_tag
+        )
+        out = parent / f"{episode_tag}_{safe}.agent_episode.json"
+        out.write_text(json.dumps(bundle, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        written.append(out)
+    return written
 
 
 def _visible_history_full(ctrl: Any) -> dict[str, list[str]]:
@@ -148,9 +237,11 @@ def format_episode_interaction_transcript(
     lines.append("=" * 80)
     lines.append("§2 Scheduling log (day, slot, agent, natural_language)")
     lines.append("=" * 80)
+    dnames = getattr(env, "agent_display_names", {}) or {}
     for t in getattr(ctrl, "scheduling_log", []) or []:
         if isinstance(t, (tuple, list)) and len(t) >= 4:
-            lines.append(f"day={t[0]} slot={t[1]} | {t[2]}: {t[3]}")
+            who = dnames.get(str(t[2]), t[2])
+            lines.append(f"day={t[0]} slot={t[1]} | {who}: {t[3]}")
         else:
             lines.append(repr(t))
     lines.append("")
@@ -247,6 +338,7 @@ def write_episode_execution_record(
     write_transcript: bool = True,
     model_trace_dir: Path | str | None = None,
     model_trace_stem: str | None = None,
+    write_per_agent_episode_bundles: bool = True,
 ) -> Path:
     """写入 UTF-8 JSON（缩进 2）。
 
@@ -255,6 +347,10 @@ def write_episode_execution_record(
 
     ``model_trace_dir`` + ``model_trace_stem`` 与 ``begin_episode_trace`` 所用 stem 一致时，将对应
     ``*.jsonl`` 合并入 ``llm_model_traces`` 字段并写入 transcript §8。
+
+    ``write_per_agent_episode_bundles=True``（默认）时，在同目录为每个 ``env.agents`` 键写入
+    ``{tag}_{agent}.agent_episode.json``：该角色的执行轨迹子集 + 其全部 LLM 原始输入输出（见
+    ``build_per_agent_episode_bundle``）。
     """
     p = Path(path).resolve()
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -274,4 +370,7 @@ def write_episode_execution_record(
             format_episode_interaction_transcript(env, llm_model_traces=llm_rows),
             encoding="utf-8",
         )
+    if write_per_agent_episode_bundles:
+        tag = _execution_json_tag(p)
+        _write_per_agent_episode_bundles(env, p, llm_rows, episode_tag=tag)
     return p

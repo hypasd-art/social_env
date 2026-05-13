@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import logging
+import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -35,10 +36,8 @@ from .agent_state_variables import (
 )
 from .controller import NegotiationWorldController, parse_agent_action_payload
 from .external_events import NegotiationExternalEventRunner
+from .roles import default_display_name_for_role
 from .types import NegotiationTimelineParams, Phase
-
-if TYPE_CHECKING:
-    from sotopia.envs.evaluators import Evaluator
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +67,7 @@ class LongTermNegotiationEnv(MessengerMixin):
         terminal_evaluators: list[Any] | None = None,
         model_name: str = "gpt-4o-mini",
         predefined_outcome_rule: dict[str, Any] | None = None,
+        agent_display_names: Mapping[str, str] | None = None,
     ) -> None:
         MessengerMixin.__init__(self)
         names = tuple(sorted(agents.keys()))
@@ -78,7 +78,19 @@ class LongTermNegotiationEnv(MessengerMixin):
 
         self.agents: dict[str, NegotiationEpisodeActor] = dict(agents)
         self.params = params or NegotiationTimelineParams()
-        self.ctrl = NegotiationWorldController(names, self.params)
+        overlay = dict(agent_display_names or {})
+        self.agent_display_names: dict[str, str] = {}
+        for n in names:
+            ag = self.agents.get(n)
+            prof = getattr(ag, "profile", None) if ag is not None else None
+            nm = ""
+            if prof is not None:
+                nm = f"{getattr(prof, 'first_name', '')} {getattr(prof, 'last_name', '')}".strip()
+            self.agent_display_names[n] = overlay.get(n) or (nm if nm else default_display_name_for_role(n))
+
+        self.ctrl = NegotiationWorldController(
+            names, self.params, agent_display_names=self.agent_display_names
+        )
         self.strict_design_v1 = strict_design_v1
 
         if system_state is not None:
@@ -131,6 +143,11 @@ class LongTermNegotiationEnv(MessengerMixin):
             dict(predefined_outcome_rule) if isinstance(predefined_outcome_rule, dict) else {}
         )
         self._contract_status_settlement_applied: bool = False
+
+        for _role, _ag in self.agents.items():
+            _bind = getattr(_ag, "bind_episode_display_names", None)
+            if callable(_bind):
+                _bind(dict(self.agent_display_names))
 
     def _apply_contract_status_settlement_if_needed(self) -> None:
         """按主合同状态自动结算，并把收益写回 ``SystemState.agent_resources``。"""
@@ -202,9 +219,19 @@ class LongTermNegotiationEnv(MessengerMixin):
             state=self.system_state,
         )
 
+    def _rewrite_digest_line_display_names(self, line: str) -> str:
+        """``[system]`` digest 中 trust 矩阵的 canonical 键换成人名，便于阅读。"""
+        out = line
+        for cid in sorted(self.agent_display_names.keys(), key=len, reverse=True):
+            disp = self.agent_display_names.get(cid, cid)
+            if not disp or disp == cid:
+                continue
+            out = re.sub(r"\b" + re.escape(cid) + r":", disp + ":", out)
+        return out
+
     def _digest(self, viewer: str) -> str:
         # 类比 ``SocialSystemEnv._before_return_astep``：在环境文本中附上 system_state 摘要。
-        base = self.system_state.digest_line(viewer=viewer)
+        base = self._rewrite_digest_line_display_names(self.system_state.digest_line(viewer=viewer))
         extra = self.ctrl.negotiation_context_addon(viewer)
         psych = psych_state_to_prompt_addon(
             self._psych_by_agent.get(viewer),

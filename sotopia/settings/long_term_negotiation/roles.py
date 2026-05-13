@@ -41,7 +41,7 @@ ROLE_SUMMARY_EN: dict[str, str] = {
     ),
     "firm_c": (
         "Third independent operator (co-seller, co-bidder, or parallel vendor). "
-        "You compete on margin and trust with firm_a and firm_b while seeking workable joint terms."
+        "You compete on margin and trust with the other vendors while seeking workable joint terms."
     ),
     "firm_d": (
         "Fourth independent operator (late entrant vendor or alternate supplier). "
@@ -56,6 +56,22 @@ ROLE_SUMMARY_EN: dict[str, str] = {
         "May join sessions when regulatory review is formally requested."
     ),
 }
+
+#: 与默认人画像姓名一致；观测与 LLM 提示用展示名，控制器内部仍用 canonical roster 键。
+ROLE_DEFAULT_DISPLAY_NAME_EN: dict[str, str] = {
+    "firm_a": "Riley Carter",
+    "firm_b": "Jordan Hayes",
+    "firm_c": "Avery Singh",
+    "firm_d": "Cameron Doyle",
+    "investor": "Morgan Bennett",
+    "regulator": "Casey Park",
+}
+
+
+def default_display_name_for_role(role: str) -> str:
+    """自然语言里使用的参与者展示名（无表项时退回 canonical 键）。"""
+    return ROLE_DEFAULT_DISPLAY_NAME_EN.get(role, role)
+
 
 #: 更细粒度的自然人画像（用于数据构建与 agent 推理提示），字段均为可读文本，不影响协议动作。
 ROLE_PERSONA_EN: dict[str, dict[str, object]] = {

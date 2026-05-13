@@ -14,12 +14,14 @@ from sotopia.settings import (
 )
 from sotopia.settings.long_term_negotiation import compute_negotiation_final_state_metrics
 
+from tests.negotiation_test_personas import ARI_LYNN, MEI_OKADA, roster_keys
+
 
 class LongTermNegotiationSmokeTest(unittest.TestCase):
     def test_bilateral_toward_signature_or_progress(self) -> None:
         async def body() -> tuple[str, LongTermNegotiationEnv]:
             pol = NegotiationDummyPolicy(mode="toward_accept")
-            ag = build_rule_dummy_agents(("firm_a", "firm_b"), policy=pol)
+            ag = build_rule_dummy_agents(roster_keys(ARI_LYNN, MEI_OKADA), policy=pol)
             env = LongTermNegotiationEnv(
                 ag,
                 params=NegotiationTimelineParams(

@@ -10,7 +10,7 @@
    ``*_terminal_eval.jsonl``，见 ``model_trace`` 模块说明。批量 CLI 默认写入
    ``{根目录}/{测试模型名}/{时间戳}/``（``--trace-flat`` 可关闭嵌套）。
 5. **执行档案**（``--execution-trace-dir`` 或 ``--artifact-root``）：每场 ``*.execution.json`` + 同 stem 的 ``*.execution.transcript.txt``
-   （全量交互纯文本），见 ``episode_execution_record``。批量时默认与 trace 相同的
+   （全量交互纯文本），以及默认 **每角色一份** ``{tag}_{agent}.agent_episode.json``（该角色执行轨迹子集 + 其全部 LLM 输入输出合一），见 ``episode_execution_record``。批量时默认与 trace 相同的
    ``{根目录}/{测试模型名}/{时间戳}/`` 嵌套。
 6. **统一根目录**（``negotiation-batch --artifact-root``）：将 execution、model trace、默认
    ``negotiation_batch.log`` 的根目录设为同一路径；**单模型**时三者落在同一叶子文件夹。

@@ -73,7 +73,11 @@ from .negotiation_run_config import (
     load_negotiation_run_config,
 )
 from .negotiation_metrics import compute_negotiation_rule_metrics
-from .scenario_loader import load_negotiation_scenario_from_environment_profile_pk
+from .roles import default_display_name_for_role
+from .scenario_loader import (
+    goal_addon_for_deal_closure_pressure,
+    load_negotiation_scenario_from_environment_profile_pk,
+)
 from .types import (
     NEGOTIATION_LINEUP_FIRMS_ONLY,
     NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
@@ -124,10 +128,12 @@ def default_negotiation_roster(
 def format_negotiation_episode_for_llm_eval(env: LongTermNegotiationEnv, *, max_action_log: int | None = 500) -> str:
     """将调度与会话轨迹压成便于 ``EpisodeLLMEvaluator`` 使用的单段文本。"""
     ctrl = env.ctrl
+    dnames: dict[str, str] = getattr(env, "agent_display_names", {}) or {}
     lines: list[str] = []
     lines.append("# Scheduling")
     for day, slot, agent, nl in ctrl.scheduling_log:
-        lines.append(f"day={day} slot={slot} | {agent}: {nl}")
+        label = dnames.get(agent, agent)
+        lines.append(f"day={day} slot={slot} | {label}: {nl}")
     lines.append("# Session log")
     for entry in ctrl.session_log:
         lines.append(json.dumps(entry, ensure_ascii=False, default=str))
@@ -244,18 +250,19 @@ def _build_role_addons_from_env_binding(
             fn = str(getattr(ap, "first_name", "") or "").strip()
             ln = str(getattr(ap, "last_name", "") or "").strip()
             dn = " ".join(x for x in (fn, ln) if x).strip()
-            role_display_name[role] = dn or role
+            role_display_name[role] = dn or default_display_name_for_role(role)
         except Exception:
-            role_display_name[role] = role
+            role_display_name[role] = default_display_name_for_role(role)
     out: dict[str, str] = {}
     for role, agent_pk in role_to_pk.items():
         parts: list[str] = []
-        peers = [f"{r} => {role_display_name.get(r, r)}" for r in roster if r in role_display_name]
+        peers = [f"- {role_display_name.get(r, r)}" for r in roster if r in role_display_name]
         if peers:
             parts.append(
-                "[display_names]\n"
-                + "\n".join(f"- {p}" for p in peers)
-                + "\nUse display names in speak messages; keep canonical ids only in JSON payload fields."
+                "[who_is_who]\n"
+                + "\n".join(peers)
+                + "\nUse only these personal names in **speak** and in **action** JSON participant fields "
+                "(same spelling as in the Environment message you see this turn)."
             )
         try:
             ap1 = AgentProfile.get(agent_pk)
@@ -380,9 +387,11 @@ async def run_llm_negotiation_episode_evaluation(
     ``{execution_trace_dir}/{execution_trace_tag}.execution.json``（见
     ``episode_execution_record.safe_execution_trace_filename``），并默认 **同目录** 再写一份
     ``*.execution.transcript.txt``（``format_episode_interaction_transcript``：纯文本、按节展开
-    全量交互，便于直接打开阅读）。若同场已开启 ``model_trace_dir``，上述 JSON / transcript
-    会 **合并** 各次 LLM 调用的完整 ``input_values``、渲染后 user prompt、首次 API 原始正文及
-    （若有）坏输出修复链原文（字段 ``llm_model_traces``、transcript §8）。
+    全量交互，便于直接打开阅读）。另默认写入 **每角色合一** 的
+    ``{execution_trace_tag}_{<agent>}.agent_episode.json``：该 agent 的执行轨迹子集与同角色的
+    全部 LLM 原始输入输出（与 ``model_trace`` 行字段一致）在同一 JSON 内。若同场已开启 ``model_trace_dir``，
+    全局 JSON / transcript / 各 ``*.agent_episode.json`` 会 **合并** 各次 LLM 调用的完整 ``input_values``、
+    渲染后 user prompt、首次 API 原始正文及（若有）坏输出修复链原文（字段 ``llm_model_traces``、transcript §8）。
     """
     if "env" not in model_dict:
         raise KeyError("model_dict must contain key 'env' for the evaluator / scoring model.")
@@ -401,6 +410,7 @@ async def run_llm_negotiation_episode_evaluation(
     n_from_scen: int | None = None
     lineup_from_scen: str | None = None
     predefined_rule: dict[str, Any] | None = None
+    gm: dict[str, Any] = {}
     if environment_profile_pk:
         scen = load_negotiation_scenario_from_environment_profile_pk(environment_profile_pk)
         env_profile = EnvironmentProfile.get(environment_profile_pk)
@@ -453,6 +463,15 @@ async def run_llm_negotiation_episode_evaluation(
                 base_goal = str(getattr(ag, "goal", "") or "")
                 extra = f"\n\n[Loaded profile+relationship context for this episode]\n{addon}"
                 ag.goal = (base_goal + extra).strip() if base_goal else extra.strip()
+
+            raw_closure = gm.get("deal_closure_pressure")
+            if isinstance(raw_closure, dict) and int(raw_closure.get("version") or 0) == 1:
+                for role, ag in agents_map.items():
+                    closer = goal_addon_for_deal_closure_pressure(role, raw_closure)
+                    if not closer:
+                        continue
+                    base_goal = str(getattr(ag, "goal", "") or "")
+                    ag.goal = (base_goal + "\n\n" + closer).strip() if base_goal else closer.strip()
 
         init_res = _initial_resources_for_roster_from_env(environment_profile_pk, roster)
         env = LongTermNegotiationEnv(

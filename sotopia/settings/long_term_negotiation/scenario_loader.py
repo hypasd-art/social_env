@@ -11,7 +11,8 @@
         "timeline": NegotiationTimelineParams 的 dict（``dataclasses.asdict`` 形态）
         "codename": str,
         "predefined_outcome_rule": dict,  # v1；合成时可带 ``outcome_rule_entropy`` 以 diversify 种子
-        "predefined_news_briefs": list[dict],  # 与 scenario_text / environment_context / 阵容绑定，条数随场景变化
+        "predefined_news_briefs": list[dict],  # 与 scenario_text / environment_context / 阵容绑定；可含 ``scenario_relevance: "decoy"`` 的干扰条，条数随场景变化
+        "deal_closure_pressure": dict,  # v1；对 1–2 名参与者附加「须在本 episode 内尽量成交」的叙事压力（软约束，仅进私有 goal）
         "negotiation_relationship_design": dict,  # firm 两两竞争等设计约束（见 scenario_loader 返回）
         ...
     }
@@ -377,6 +378,7 @@ def _brief_for_thread(
         "summary": summary,
         "signal_hint": round(signal_hint, 4),
         "correlation_level": correlation_level,
+        "scenario_relevance": "scenario_bound",
         "scenario_binding": {
             "codename": codename,
             "scene_type": scene_type,
@@ -399,6 +401,119 @@ def _brief_for_thread(
     }
 
 
+def _decoy_news_briefs(
+    *,
+    codename: str,
+    rule: Mapping[str, Any],
+    roles: tuple[str, ...],
+    rng: random.Random,
+    count: int,
+) -> list[dict[str, Any]]:
+    """若干条 **刻意弱绑定** 的干扰新闻：正文像真新闻，但与本场 ``codename`` 交易/场景无可靠因果链。"""
+    base_signal = float(rule.get("news_signal", 0.0) or 0.0)
+    role_line = ", ".join(roles) if roles else "(no roster)"
+
+    # (thread_id, para1, para2, para3) — 避免与本场 cold_chain / bid / labor 等线索同构
+    specs: list[tuple[str, str, str, str]] = [
+        (
+            "decoy_distant_metro_transit_fare_cap",
+            "A capital city 900km away announced a pilot fare cap on light-rail airport branches; "
+            "commuter forums argue the cap will be funded by advertising bundles, not ticket revenue.",
+            "Local vendors in that city report mixed foot traffic—some malls up, night markets flat—"
+            "but analysts stress the sample is too small to infer cross-regional consumer budgets.",
+            f"Relevance to {codename}: none established; treat as ambient macro noise unless Environment links jurisdictions.",
+        ),
+        (
+            "decoy_offshore_sports_broadcast_rights_rumor",
+            "An offshore sports league denied a tabloid claim that streaming rights were pre-sold to a consortium "
+            "linked to a retired athlete's holding company; lawyers call the story 'speculative headline bait'.",
+            "Sponsorship desks say ad inventory is oversold in two regions while undersold elsewhere—"
+            "a pattern that often reflects calendar quirks rather than structural demand collapse.",
+            f"Participants {role_line} should not map broadcast CPM swings to stall-level contract economics without primary sources.",
+        ),
+        (
+            "decoy_celebrity_skincare_line_recall_social_media_storm",
+            "A celebrity-branded skincare SKU triggered a weekend hashtag storm after unverified photos of packaging discoloration; "
+            "the brand posted lab certificates that third-party chemists partially disputed.",
+            "Retail pharmacies in unrelated categories saw a one-day lift in 'trusted house brand' sales—"
+            "likely substitution noise, not a durable demand shift for produce or industrial services.",
+            f"Distraction bulletin: weak coupling to {codename}; do not treat social velocity as counterpart risk.",
+        ),
+        (
+            "decoy_polar_research_station_catering_tender",
+            "A polar research station opened a catering tender emphasizing calorie density and shelf stability; "
+            "bidders include logistics firms with no history in your local trade lane.",
+            "Procurement notes emphasize anti-collusion rules and satellite-phone bid submission—"
+            "procedural details that do not transfer to wet-market stall scheduling unless explicitly adopted.",
+            f"Noise item for roster {role_line}: verify any claimed 'precedent' against your Environment rules.",
+        ),
+        (
+            "decoy_meme_token_microcap_spike_headline",
+            "Headline indices flagged a triple-digit percent move in an illiquid meme token after a viral clip; "
+            "market-structure blogs warn printed percentages often omit depth and halts.",
+            "Two exchanges posted conflicting high/low prints within minutes, a classic microcap reporting artifact.",
+            f"No implied financing spread for {codename}; ignore unless your session explicitly introduces crypto collateral.",
+        ),
+        (
+            "decoy_maritime_ballast_water_rule_comment_period",
+            "A maritime regulator opened a comment period on ballast-water sampling intervals; "
+            "environmental NGOs applaud while bulk carriers cite crew-time costs.",
+            "The comment PDF references routes and ports unrelated to your scenario geography; "
+            "cross-check any alleged 'policy shock' to your lane before changing reservation prices.",
+            f"Red-herring macro: {role_line} should default to no operational change from this thread alone.",
+        ),
+    ]
+
+    n = max(0, min(count, len(specs)))
+    picks = list(range(len(specs)))
+    rng.shuffle(picks)
+    chosen = picks[:n]
+    out: list[dict[str, Any]] = []
+    for idx in chosen:
+        thread_id, para1, para2, para3 = specs[idx]
+        jitter = rng.uniform(-0.35, 0.35)
+        signal_hint = _bounded(base_signal * 0.15 + jitter, -1.0, 1.0)
+        corr = rng.choice(("low", "low", "partial"))
+        summary = " ".join([para1, para2, para3])
+        title_seed = rng.choice(
+            (
+                f"[ambient wire] {thread_id.replace('_', ' ')}",
+                f"Unlinked bulletin ({codename}): {thread_id.replace('_', ' ')}",
+                f"Background noise — {thread_id.replace('_', ' ')}",
+            )
+        )
+        out.append(
+            {
+                "thread_id": thread_id,
+                "title": title_seed,
+                "summary": summary,
+                "signal_hint": round(signal_hint, 4),
+                "correlation_level": corr,
+                "scenario_relevance": "decoy",
+                "scenario_binding": {
+                    "codename": codename,
+                    "scene_type": "decoy_unlinked",
+                    "lineup": "n/a",
+                    "num_participants": len(roles),
+                    "active_roles": list(roles),
+                },
+                "complexity": {
+                    "conflicting_interpretations": (
+                        "Tabloid velocity contradicts slower-moving primary sources; headline sentiment is unreliable here."
+                    ),
+                    "counterfactual_note": (
+                        "If the underlying rumor is false, the entire story collapses—yet social reshares can lag by days."
+                    ),
+                    "actionability_warning": (
+                        "Simulator policy: this item is intentionally weakly tied to the episode; "
+                        "do not premise negotiation JSON moves solely on this bulletin."
+                    ),
+                },
+            }
+        )
+    return out
+
+
 def _build_news_briefs_from_rule(
     *,
     codename: str,
@@ -409,7 +524,7 @@ def _build_news_briefs_from_rule(
     num_participants: int = 2,
     calendar_days: int | None = None,
 ) -> list[dict[str, Any]]:
-    """新闻与**具体测试场景**绑定：条数随线索变化，正文刻意多源、冲突、可行动性警告。"""
+    """新闻与**具体测试场景**绑定；并混入 1–3 条 ``scenario_relevance: "decoy"`` 的无关/弱相关干扰稿，再按种子打乱顺序。"""
     seed = int(rule.get("deterministic_seed") or _rule_seed(codename, "news"))
     env: Mapping[str, Any] = environment_context or {}
     roles = tuple(negotiation_role_order(lineup)[:num_participants])
@@ -435,7 +550,19 @@ def _build_news_briefs_from_rule(
                 rng=rng,
             )
         )
-    return out
+    decoy_rng = random.Random(seed ^ 0xDEC0DE71)
+    n_decoys = decoy_rng.randint(1, 3)
+    decoys = _decoy_news_briefs(
+        codename=codename,
+        rule=rule,
+        roles=roles,
+        rng=random.Random(seed ^ 0xBADF00D),
+        count=n_decoys,
+    )
+    combined = list(out) + decoys
+    shuffle_rng = random.Random(seed ^ 0xA11E5EED)
+    shuffle_rng.shuffle(combined)
+    return combined
 
 
 def _infer_environment_context(*, codename: str, scenario_text: str) -> dict[str, Any]:
@@ -495,6 +622,88 @@ def _infer_environment_context(*, codename: str, scenario_text: str) -> dict[str
     }
 
 
+_CLOSURE_TEMPLATE_BANK: tuple[tuple[str, str], ...] = (
+    (
+        "Cash and credibility are on the line.",
+        "Your operating runway is tight this cycle: suppliers and payroll expect clarity. If this episode "
+        "ends without a workable signed path, you expect immediate knock-on costs you cannot paper over with "
+        "another deferral.",
+    ),
+    (
+        "You already committed capacity you cannot unwind cheaply.",
+        "Upstream commitments—inventory, labor slots, or a customer-facing delivery promise—assume today's "
+        "negotiation lands. Leaving without agreement strands sunk cost and burns trust you need next quarter.",
+    ),
+    (
+        "Stakeholders escalated this negotiation.",
+        "A lender, board, or internal control node expects the negotiation window to close now. Open-ended delay "
+        "is read as failure and may force intervention you dislike.",
+    ),
+    (
+        "A compliance / reporting clock is ticking.",
+        "You need a defensible, signed commercial outcome within this episode to stay ahead of filings, covenants, "
+        "or counterpart audits. Ambiguity after the calendar closes becomes liability.",
+    ),
+    (
+        "Your reputation is unusually exposed.",
+        "Market gossip tracks whether you can close. Walking away reads as unreliability and will price you out of "
+        "the next round of opportunities your business depends on.",
+    ),
+)
+
+
+def _build_deal_closure_pressure(
+    *,
+    codename: str,
+    lineup: str,
+    num_participants: int,
+    scenario_text: str = "",
+) -> dict[str, Any]:
+    """为 1–2 名参与者生成「必须尽量在本 episode 内成交」叙事压力（仅元数据；不收紧规则引擎）。"""
+    roles = list(negotiation_role_order(lineup)[:num_participants])
+    seed = _rule_seed(codename, lineup, str(num_participants), "deal_closure", scenario_text[:256])
+    rng = random.Random(seed)
+    n_pressured = rng.randint(1, min(2, len(roles)))
+    pressured: list[str] = list(rng.sample(roles, n_pressured))
+    entries: dict[str, Any] = {}
+    for r in pressured:
+        headline_en, body_en = rng.choice(_CLOSURE_TEMPLATE_BANK)
+        entries[r] = {"headline_en": headline_en, "body_en": body_en}
+    return {
+        "version": 1,
+        "seed": seed,
+        "pressured_roles": list(pressured),
+        "entries": entries,
+    }
+
+
+def goal_addon_for_deal_closure_pressure(
+    role: str, pressure: Mapping[str, Any] | None
+) -> str | None:
+    """从 ``game_metadata["deal_closure_pressure"]`` 取该 canonical role 的 goal 追加段；无压力则 ``None``。"""
+    if pressure is None or not isinstance(pressure, dict):
+        return None
+    if int(pressure.get("version") or 0) != 1:
+        return None
+    entries = pressure.get("entries")
+    if not isinstance(entries, dict):
+        return None
+    row = entries.get(role)
+    if not isinstance(row, dict):
+        return None
+    h = str(row.get("headline_en") or "").strip()
+    b = str(row.get("body_en") or "").strip()
+    if not h and not b:
+        return None
+    soft = (
+        "Soft constraint: you are not required to accept an unlawful or catastrophic deal, but you should "
+        "prioritize reaching a lawful, mutually workable agreement within this episode unless terms are "
+        "truly unacceptable."
+    )
+    parts = ["[Deal closure pressure — private to you]", h, b, soft]
+    return "\n".join(p for p in parts if p).strip()
+
+
 def build_negotiation_game_metadata_bundle(
     codename: str,
     quartet: bool,
@@ -546,6 +755,12 @@ def build_negotiation_game_metadata_bundle(
         num_participants=n,
         calendar_days=int(params.D),
     )
+    deal_closure_pressure = _build_deal_closure_pressure(
+        codename=codename,
+        lineup=lineup,
+        num_participants=n,
+        scenario_text=scenario_text,
+    )
     return {
         "pipeline": "long_term_negotiation",
         "strict_design_v1": strict,
@@ -569,6 +784,7 @@ def build_negotiation_game_metadata_bundle(
         "codename": codename,
         "predefined_outcome_rule": predefined_rule,
         "predefined_news_briefs": predefined_news_briefs,
+        "deal_closure_pressure": deal_closure_pressure,
         "environment_context": env_ctx,
         # 供评测与 agent 侧读入：完整场景叙事 + 社会性主题标签（不改变 timeline 解析）。
         "scenario_text": scenario_text,
@@ -713,6 +929,7 @@ __all__ = [
     "NegotiationStoredScenario",
     "build_negotiation_game_metadata_bundle",
     "environment_pks_from_manifest",
+    "goal_addon_for_deal_closure_pressure",
     "load_negotiation_scenario_from_environment_profile_pk",
     "negotiation_timeline_params_from_saved_dict",
     "parsed_scenario_from_game_metadata",

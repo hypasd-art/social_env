@@ -14,31 +14,28 @@
 ``EnvironmentProfile.game_metadata.long_term_negotiation`` + V2 行是为 **采样题库 /
 实验管理** 准备的侧车数据，可把 ``pk`` / ``timeline`` JSON 回填到评测入口。
 
-支持的 ``--modes``：
+支持的 ``--modes``（**仅** ``firms_only`` lineup；token 一律以 ``firms*`` 表示人数）：
 
-- ``bilat`` / ``tri`` / ``quartet`` —— ``with_institutional`` lineup，按
-  ``firm_a, firm_b, investor, regulator`` 顺序取 N=2/3/4。
-- ``firms3`` / ``firms4`` —— ``firms_only`` lineup（**3 家及以上公司**），按
-  ``firm_a, firm_b, firm_c, firm_d`` 顺序取 N=3/4，机构位 investor / regulator
-  不进入世界（融资 / 监管路径成为 no-op，contract 主体由 N 家公司组成）。
+- ``firms2`` / ``firms3`` / ``firms4`` —— 2 / 3 / 4 个商业参与者（``firm_a`` … ``firm_d`` 前缀），
+  **无** investor / regulator 机构位。
 
 示例::
 
     cd social_env
     SOTOPIA_STORAGE_BACKEND=local python scripts/generate_long_term_negotiation_scenarios.py --clean --tag ltr_benchmark_v1
 
-    # 规模：只生成 D6/D8 时间轴，每种 (模式×预设) 重复 2 份；模式含双方 / 三方 / 四方 / 三家公司 / 四家公司
+    # 规模：只生成 D6/D8 时间轴，每种 (模式×预设) 重复 2 份
     python scripts/generate_long_term_negotiation_scenarios.py --tag ltr_scale_v1 \\
-        --modes bilat,tri,quartet,firms3,firms4 --timeline-labels D6,D8 --replicates 2
+        --modes firms2,firms3,firms4 --timeline-labels D6,D8 --replicates 2
 
-    # 仅 3+ 家公司互谈（不含 investor/regulator）
+    # 仅 3 / 4 方互谈
     python scripts/generate_long_term_negotiation_scenarios.py --tag ltr_firms_only \\
         --modes firms3,firms4 --timeline-labels D6,D8 --replicates 1
 
-    # 精确指定每种人数 / 公司数的场景条数（不再用 --modes / --replicates）：
-    # 8 条 firms3 + 12 条 firms4 + 5 条 bilat（在 D6,D8 preset 上轮转）
+    # 精确指定每种人数场景条数（不再用 --modes / --replicates）：
+    # 8 条 firms3 + 12 条 firms4 + 6 条 firms2（在 D6,D8 preset 上轮转）
     python scripts/generate_long_term_negotiation_scenarios.py --tag ltr_mix \\
-        --mode-counts firms3=8,firms4=12,bilat=5 --timeline-labels D6,D8
+        --mode-counts firms3=8,firms4=12,firms2=6 --timeline-labels D6,D8
 
     # 要求说明（写入 manifest，便于实验记录）
     python scripts/generate_long_term_negotiation_scenarios.py --requirements "用于论文表2；仅规则评测" --tag ltr_paper
@@ -80,7 +77,6 @@ from sotopia.database.persistent_profile import EnvironmentList, RelationshipTyp
 
 from sotopia.settings.long_term_negotiation.types import (  # noqa: E402
     NEGOTIATION_LINEUP_FIRMS_ONLY,
-    NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
     NegotiationTimelineParams,
     SESSION_FIRMS_ONLY_ROLE_ORDER,
     SESSION_SPEAKER_ROLE_ORDER,
@@ -148,6 +144,51 @@ _PERSONALITY_ARCHETYPES: tuple[dict[str, str], ...] = (
         "extra_skill": "procedural robustness checks",
         "motivation": "be trusted as the most reliable counterparty",
     },
+    {
+        "label": "wet-market-hawker",
+        "style": "loud, emotional display of 'fair price'; reputation and repeat neighbors beat spreadsheets",
+        "risk": "gut-feel and rumor-driven; may mis-remember yesterday's quote then stubbornly defend face",
+        "collab": "loyal to regulars; cold to strangers until a small favor is exchanged",
+        "extra_skill": "crowd-timing and stall-banter to reset leverage",
+        "motivation": "protect today's cash drawer and lane reputation more than optimal game theory",
+        "big_five": "Openness: medium; Conscientiousness: low; Extraversion: high; Agreeableness: medium; Neuroticism: high",
+    },
+    {
+        "label": "chatty-auntie-vendor",
+        "style": "small talk, gossip-as-signal, bundles extras ('I'll throw in scallions') instead of precise math",
+        "risk": "under-prices when flattered; over-prices when slighted",
+        "collab": "softens for kindness stories; hardens if ignored mid-sentence",
+        "extra_skill": "reading who is in a hurry vs browsing",
+        "motivation": "keep the stall feeling like family while still covering rent",
+        "big_five": "Openness: high; Conscientiousness: medium; Extraversion: high; Agreeableness: high; Neuroticism: medium",
+    },
+    {
+        "label": "hot-then-cool-stallkeeper",
+        "style": "short temper, blunt insults to 'unfair' offers, then sudden apology tea-break reset",
+        "risk": "impulse concessions after conflict; inconsistent patience by time of day",
+        "collab": "fair-dealing once respect is shown; holds grudges lightly if paid in humor",
+        "extra_skill": "dramatic pause and walk-away bluff (sometimes real)",
+        "motivation": "avoid feeling cheated even if margin is thin",
+        "big_five": "Openness: low; Conscientiousness: low; Extraversion: high; Agreeableness: low; Neuroticism: high",
+    },
+    {
+        "label": "superstitious-round-number",
+        "style": "lucky/unlucky digits, round-yuan anchors, avoids 'splitting the difference' on 'bad' numbers",
+        "risk": "non-linear jumps in price tied to mood and omens, not marginal cost",
+        "collab": "trusts handshakes and witnesses more than written lines",
+        "extra_skill": "narrating last week's 'sign' from the weather or foot traffic",
+        "motivation": "close with a number that 'sits right' socially, not only economically",
+        "big_five": "Openness: medium; Conscientiousness: medium; Extraversion: medium; Agreeableness: medium; Neuroticism: medium",
+    },
+    {
+        "label": "sleepy-morning-seller",
+        "style": "low energy early; vague until coffee; sharpens after lunch rush",
+        "risk": "forgets a prior verbal promise then negotiates as if fresh",
+        "collab": "easy rapport once awake; needs reminders written on cardboard",
+        "extra_skill": "muscle-memory packing speed over verbal precision",
+        "motivation": "survive the shift without drama; prefers repeat small wins",
+        "big_five": "Openness: low; Conscientiousness: medium; Extraversion: low; Agreeableness: high; Neuroticism: medium",
+    },
 )
 
 # 数据合成层：在角色基底 voice 上再叠一层可复现的「口头习惯」，保证同场多人语言风格可区分。
@@ -160,6 +201,9 @@ _SPEECH_LAYER_MODS: tuple[str, ...] = (
     "Micro-habit: ends stressful turns with a single blunt constraint line ('Non-starter: …').",
     "Micro-habit: rare dry humor only after a concession, never during threats.",
     "Micro-habit: when disagreeing, labels the disagreement as 'timing' or 'scope' rather than personal.",
+    "Micro-habit: counts change aloud or taps the scale when insisting a price is 'already fair'.",
+    "Micro-habit: alternates half-loud stall-call with sudden quiet aside to the buyer only.",
+    "Micro-habit: cites a neighbor stall's price without naming them ('the next lane did…').",
 )
 
 # 与 archetype 正交的「对话签名」：同一场景内多人应可听声辨人（合成时可复现）。
@@ -315,6 +359,8 @@ def _build_diversified_persona_overrides(*, roles: tuple[str, ...], tag: str) ->
             "short_term_debt_due": max(0.0, round(debt_base * (1.0 - pct), 2)),
             "persona_archetype": archetype["label"],
         }
+        if archetype.get("big_five"):
+            out[role]["big_five"] = str(archetype["big_five"])
     return out
 
 
@@ -492,10 +538,9 @@ def parse_unique_modes(s: str) -> list[str]:
 
     合法 token：
 
-    - ``bilat`` / ``tri`` / ``quartet`` —— 为兼容旧 token，统一映射到 ``firms_only``（不含机构位）。
-    - ``firms3`` / ``firms4`` —— ``firms_only`` lineup（3 / 4 家公司，无机构位）。
+    - ``firms2`` / ``firms3`` / ``firms4`` —— ``firms_only`` lineup（2 / 3 / 4 名商业参与者）。
     """
-    allow = frozenset({"bilat", "tri", "quartet", "firms3", "firms4"})
+    allow = frozenset({"firms2", "firms3", "firms4"})
     out: list[str] = []
     seen: set[str] = set()
     for part in s.split(","):
@@ -517,7 +562,7 @@ def parse_mode_counts(s: str) -> dict[str, int] | None:
     spec = (s or "").strip()
     if not spec:
         return None
-    allow = frozenset({"bilat", "tri", "quartet", "firms3", "firms4"})
+    allow = frozenset({"firms2", "firms3", "firms4"})
     plan: dict[str, int] = {}
     for raw in spec.split(","):
         chunk = raw.strip()
@@ -547,12 +592,9 @@ def parse_mode_counts(s: str) -> dict[str, int] | None:
     return plan
 
 
-# (模式 → (lineup, num_participants)) 映射；
-# 为兼容旧 token（bilat/tri/quartet）但移除 investor/regulator，统一映射到 firms_only。
+# 模式 → (lineup, num_participants)；数据生成仅保留 ``firms_only``（``firms2``/``firms3``/``firms4``）。
 _MODE_TO_LINEUP_N: dict[str, tuple[str, int]] = {
-    "bilat": (NEGOTIATION_LINEUP_FIRMS_ONLY, 2),
-    "tri": (NEGOTIATION_LINEUP_FIRMS_ONLY, 3),
-    "quartet": (NEGOTIATION_LINEUP_FIRMS_ONLY, 4),
+    "firms2": (NEGOTIATION_LINEUP_FIRMS_ONLY, 2),
     "firms3": (NEGOTIATION_LINEUP_FIRMS_ONLY, 3),
     "firms4": (NEGOTIATION_LINEUP_FIRMS_ONLY, 4),
 }
@@ -618,9 +660,11 @@ def bilateral_timeline_presets() -> list[tuple[str, NegotiationTimelineParams]]:
 # 写入 ``EnvironmentProfile.scenario`` / ``agent_goals`` 与 ``AgentProfile.public_info`` 的社会性叙事骨架
 # （协议层 canonical id 仍为 ``firm_*``，见 ``roles.ROLE_SUMMARY_EN``）。
 MARKET_COMPETITION_SNIPPET = (
-    "Multiple independent sellers occupy the same trade lane with overlapping goods; "
-    "customers compare total offers (price, freshness, bundle perks, delivery slot, after-sales) and pick one winner. "
-    "Reference rival offers in speech when persuading; use structured JSON moves for binding terms."
+    "Multiple independent sellers—or informal peers offering the same class of good—overlap in what they sell; "
+    "buyers compare total value (price, condition, freshness, bundle perks, pickup or delivery slot, after-sales) "
+    "and pick one workable plan. Scales range from **personal everyday purchases** (groceries, school lists, "
+    "second-hand items) to small cooperative restocks. Reference rival offers in speech when persuading; "
+    "use structured JSON moves for binding terms."
 )
 
 SCENE_CONTEXT_TEMPLATES: tuple[dict[str, Any], ...] = (
@@ -632,6 +676,51 @@ SCENE_CONTEXT_TEMPLATES: tuple[dict[str, Any], ...] = (
             "information is noisy and customer decisions are highly reactive."
         ),
         "perception_cues": ["foot_traffic", "competitor_freshness", "hawker_noise_level"],
+    },
+    {
+        "scene_type": "personal_retail_compare",
+        "headline": "日常个人采购比价",
+        "detail": (
+            "A single household or student compares two or more informal sellers for everyday goods—snacks, "
+            "cleaning supplies, small electronics accessories—where ticket size is small but repeat visits matter."
+        ),
+        "perception_cues": ["shelf_substitution_risk", "walking_distance_minutes", "return_policy_clarity"],
+    },
+    {
+        "scene_type": "second_hand_peer_sale",
+        "headline": "二手闲置个人转让",
+        "detail": (
+            "Private individuals trade used bikes, furniture, or course books; trust is built through "
+            "inspectable condition, honest defects, and agreed handoff time rather than formal procurement."
+        ),
+        "perception_cues": ["wear_visible", "peer_reference_call", "cash_on_pickup_preference"],
+    },
+    {
+        "scene_type": "neighborhood_group_buy",
+        "headline": "邻里拼单散购",
+        "detail": (
+            "Neighbors pool a modest list (rice, oil, fruit); one coordinator negotiates minimum order, split rules, "
+            "and delivery drop-off with competing micro-suppliers."
+        ),
+        "perception_cues": ["min_order_gap", "split_fairness_per_unit", "elevator_carry_limit"],
+    },
+    {
+        "scene_type": "school_supplies_season",
+        "headline": "开学季个人采买",
+        "detail": (
+            "A caregiver shops small stationery and uniform bits across rival booths; kid preferences and total "
+            "out-of-pocket dominate over long-term supplier contracts."
+        ),
+        "perception_cues": ["size_color_stock", "peer_parent_price_whisper", "last_minute_rush_pressure"],
+    },
+    {
+        "scene_type": "errand_runner_basket",
+        "headline": "代买跑腿同一购物单",
+        "detail": (
+            "Two informal errand runners bid to fulfill the same grocery list with substitution policies and "
+            "time windows—closer to personal concierge rivalry than B2B procurement."
+        ),
+        "perception_cues": ["substitution_policy_strictness", "delivery_window_overlap", "receipt_photo_trust"],
     },
     {
         "scene_type": "business_outsourcing",
@@ -667,9 +756,10 @@ def _context_reasoning_suffix(ctx: dict[str, Any]) -> str:
     )
 
 NEGOTIATION_SCENARIO_BODY = (
-    "Two **individual** participants — typically a lead buyer and a primary vendor — negotiate across several "
-    "calendar days inside a busy **market-hall / wet-market / small-business procurement** setting "
-    "(bulk produce, dry goods restock, or cooperative purchase circle). "
+    "Two **individual** participants — a choosy buyer and a primary counterparty (stall, errand-runner, or peer "
+    "seller) — negotiate across several calendar days in settings that can include **wet-market lanes**, "
+    "**neighborhood shops**, **second-hand meetups**, **dorm or block small bulk buys**, or **everyday personal "
+    "retail** (groceries, school lists, small household items). "
     f"{MARKET_COMPETITION_SNIPPET} "
     "Scheduling is capacity-constrained per day; in-session exchanges mix natural dialogue with structured "
     "negotiation JSON actions. Treat counterparties as sole traders or households, not abstract corporations."
@@ -689,8 +779,9 @@ NEGOTIATION_SCENARIO_TRILATERAL = (
 )
 
 NEGOTIATION_SCENARIO_FIRMS_ONLY_3 = (
-    "Three **individual** operators along one commerce strip: a procurement lead (firm_a), an anchor vendor (firm_b), "
-    "and a parallel vendor (firm_c) selling overlapping SKUs. "
+    "Three **individual** operators in the same decision space: e.g. a careful buyer (firm_a), a familiar seller "
+    "(firm_b), and a competing seller (firm_c) — stalls, errand-runners, or peer resellers offering overlapping "
+    "goods or substitute baskets for **personal or small-group everyday purchase**. "
     f"{MARKET_COMPETITION_SNIPPET} "
     "They negotiate multi-day bundles that may include joint sourcing, split delivery routes, or price-matching "
     "against unseen rivals. Financing and regulatory institutional paths are off-table — only the three principals "
@@ -698,11 +789,27 @@ NEGOTIATION_SCENARIO_FIRMS_ONLY_3 = (
 )
 
 NEGOTIATION_SCENARIO_FIRMS_ONLY_4 = (
-    "Four **individual** operators: lead buyer (firm_a), incumbent vendor (firm_b), plus two competing sellers "
-    "(firm_c, firm_d) chasing the same foot-traffic and wholesale callbacks. "
+    "Four **individual** operators: lead buyer (firm_a), incumbent counterparty (firm_b), plus two competing "
+    "sellers (firm_c, firm_d) — same foot-traffic, group-buy list, or second-hand lane; rivalry can be over "
+    "groceries, dorm supplies, used gear, or small services, not only wholesale restock. "
     f"{MARKET_COMPETITION_SNIPPET} "
     "Sessions rotate formal proposals as each side tries to become the customer's best composite offer while "
     "keeping stock and cash constraints honest. No investor/regulator roles — pure peer rivalry plus buyer choice."
+)
+
+
+_HANDWRITTEN_ROLE_OCCUPATION: dict[str, str] = {
+    "firm_a": "Household / canteen buyer (personal budget)",
+    "firm_b": "Wet-market stall operator",
+    "firm_c": "Challenger hawker / parallel stall",
+    "firm_d": "Late-shift specialty stall",
+    "investor": "Informal capital partner",
+    "regulator": "Market-hall rules coordinator",
+}
+
+_DEFAULT_BIG_FIVE = (
+    "Openness: medium; Conscientiousness: high; Extraversion: medium; "
+    "Agreeableness: medium; Neuroticism: medium"
 )
 
 
@@ -723,7 +830,7 @@ def save_negotiation_agents(*, tag: str, roles: tuple[str, ...]) -> dict[str, Ag
             first_name=fn[:12],
             last_name=(ln + "Exec")[:20],
             age=42,
-            occupation="individual market operator / buyer",
+            occupation=_HANDWRITTEN_ROLE_OCCUPATION.get(role, "Individual market participant")[:80],
             gender="unknown",
             gender_pronoun="they/them",
             public_info=f"{ROLE_SUMMARY_EN.get(role, '')} Background: {bg}",
@@ -732,14 +839,14 @@ def save_negotiation_agents(*, tag: str, roles: tuple[str, ...]) -> dict[str, Ag
                 f"[dialogue_voice — use in speak turns; differ clearly from other roster members] {voice}"
             ),
             decision_making_style=(
-                "Compares rival offers explicitly, then uses protocol-compliant formal moves for commitments. "
+                "May lean on habit, gossip, or gut as well as numbers; still uses protocol-compliant formal moves "
+                "when locking commitments. "
                 f"Core skills: {skills}. "
                 "Natural-language turns: follow [dialogue_voice] in personality (register, pacing, openers, avoid)."
             ),
             moral_values=["fairness"],
             schwartz_personal_values=["achievement"],
-            big_five="Openness: medium; Conscientiousness: high; Extraversion: medium; "
-            "Agreeableness: medium; Neuroticism: medium",
+            big_five=str(persona.get("big_five") or _DEFAULT_BIG_FIVE)[:240],
             secret=f"Survival pressure: {pressure}",
             model_id=f"negotiation-{role}-{tag}",
             tag=tag,
@@ -789,12 +896,12 @@ def build_environment_profile_legacy(
     params: NegotiationTimelineParams,
     tag: str,
     num_participants: int | None = None,
-    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    lineup: str = NEGOTIATION_LINEUP_FIRMS_ONLY,
 ) -> EnvironmentProfile:
     """``lineup`` + ``num_participants`` 共同决定 roster 与场景文案。
 
-    - ``with_institutional``：N=2 (firm_a/firm_b)，N=3 (+investor)，N=4 (+regulator)。
-    - ``firms_only``：N=3 (firm_a/firm_b/firm_c)，N=4 (+firm_d)；不含机构位。
+    默认 ``lineup=firms_only``。``firms_only``：N=2/3/4 对应 ``firm_a``…``firm_d`` 前缀；
+    若显式传入 ``with_institutional``，则仍支持旧 N=2/3/4 机构阵容文案（本仓库数据生成脚本不再使用）。
     """
     n = num_participants if num_participants is not None else (4 if quartet else 2)
     if n < 2 or n > 4:
@@ -1032,7 +1139,7 @@ def persist_scenario_v2(
     event_anchor_pk: str | None,
     v2_by_role: dict[str, Any],
     num_participants: int | None = None,
-    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    lineup: str = NEGOTIATION_LINEUP_FIRMS_ONLY,
 ) -> tuple[Any, Contract | None, Any]:
     """落库单个场景的 ``EnvironmentProfileV2``、``SystemStateSnapshot``、可选 ``Contract``。
 
@@ -1143,11 +1250,9 @@ def main() -> int:
     ap.add_argument("--tag", default="ltr_negotiation_bench_v1")
     ap.add_argument(
         "--modes",
-        default="bilat,quartet",
+        default="firms3,firms4",
         help=(
-            "逗号分隔、去重保序：bilat（2 人，with_institutional）/ tri（3 人，含 investor）/ "
-            "quartet（4 人，含 investor + regulator）/ firms3（3 家公司，无机构位）/ "
-            "firms4（4 家公司，无机构位）"
+            "逗号分隔、去重保序：仅 firms2 / firms3 / firms4（均为 firms_only lineup，无机构位）"
         ),
     )
     ap.add_argument(
@@ -1165,9 +1270,9 @@ def main() -> int:
         "--mode-counts",
         default="",
         help=(
-            "按模式精确指定生成条数：MODE=N[,MODE=N...]；例 firms3=8,firms4=12,bilat=5。"
+            "按模式精确指定生成条数：MODE=N[,MODE=N...]；例 firms3=8,firms4=12,firms2=6。"
             "传入后忽略 --modes 与 --replicates，每个 mode 在 --timeline-labels 选定的 preset 上"
-            "轮转生成 N 条。合法 MODE：bilat/tri/quartet/firms3/firms4。"
+            "轮转生成 N 条。合法 MODE：firms2/firms3/firms4。"
         ),
     )
     ap.add_argument(
@@ -1240,9 +1345,7 @@ def main() -> int:
     env_lineup_by_codename: dict[str, str] = {}
 
     _MODE_PREFIX = {
-        "bilat": "bil",
-        "tri": "tri",
-        "quartet": "quad",
+        "firms2": "firms2",
         "firms3": "firms3",
         "firms4": "firms4",
     }
@@ -1271,7 +1374,7 @@ def main() -> int:
             variant_i += 1
             legacy = build_environment_profile_legacy(
                 codename=codename,
-                quartet=(lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and n_agents == 4),
+                quartet=False,
                 params=params,
                 tag=args.tag,
                 num_participants=n_agents,
@@ -1285,7 +1388,7 @@ def main() -> int:
             env_lineup_by_codename[codename] = lineup
             persist_scenario_v2(
                 legacy,
-                quartet=(lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and n_agents == 4),
+                quartet=False,
                 params=params,
                 tag=args.tag,
                 event_anchor_pk=anchor_pk,

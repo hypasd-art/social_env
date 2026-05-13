@@ -5,16 +5,14 @@
 2. 合并 ``scenario_loader.build_negotiation_game_metadata_bundle`` —— timeline / lineup 与手写脚本同源，
    ``predefined_outcome_rule`` 默认再混入 ``secrets`` 随机熵（每条环境不同）；``--deterministic-outcome-rule``
    时与手写脚本一样仅由 codename/阵容/场景文前缀决定种子。
-3. **AgentProfile**：**每合成一条环境**即合成并落库一套六角色 ``AgentProfile`` / ``AgentProfileV2``，再写入
-   该环境的 ``EnvAgentComboStorage`` 与 V2 快照，与环境一一绑定。公司侧默认走 LLM、机构位静态；
-   ``--agent-profiles-all-llm`` 六角色均 LLM；``--legacy-agent-profiles`` 为每环境手写占位画像。
+3. **AgentProfile**：**每合成一条环境**即合成并落库一套 **参与会话的角色** 对应 ``AgentProfile`` / ``AgentProfileV2``（见下），再写入
+   该环境的 ``EnvAgentComboStorage`` 与 V2 快照，与环境一一绑定。仅 **公司角色 firm_a..firm_d** 可走 LLM；
+   本脚本生成的场景均为 ``firms_only`` roster，**不包含** investor/regulator 会话位，亦**不会**用大模型扮演二者。
+   ``--legacy-agent-profiles`` 为每环境手写占位画像。
 4. 复用手写脚本 ``generate_long_term_negotiation_scenarios.py`` 的 ``EnvAgentComboStorage`` /
    ``persist_scenario_v2``，保持 V2 快照与 benchmark 数据结构一致。
 
-支持的 ``--modes``：
-
-- ``bilat`` / ``tri`` / ``quartet`` —— ``with_institutional`` lineup（含 investor / regulator）。
-- ``firms3`` / ``firms4`` —— ``firms_only`` lineup，3 / 4 家公司互谈，不含机构位。
+支持的 ``--modes``（**仅** ``firms_only``；合法 token：``firms2`` / ``firms3`` / ``firms4``）。
 
 依赖 ``social_env/.env`` 里的 ``OPENAI_API_KEY``（及可选 BASE_URL）。
 
@@ -22,20 +20,20 @@
 
     cd social_env
     SOTOPIA_STORAGE_BACKEND=local python scripts/generate_long_term_negotiation_llm.py \\
-        --model gpt-4o-mini --n 3 --modes bilat --tag ltr_llm_v1
+        --model gpt-4o-mini --n 3 --modes firms2 --tag ltr_llm_v1
 
-    # 规模：条数 --n；并发 --concurrency；时间轴仅用 D6/D8；模式按列表对每条 profile 轮转（含 firms3/firms4）
+    # 规模：条数 --n；并发 --concurrency；时间轴仅用 D6/D8；模式按列表对每条 profile 轮转
     python scripts/generate_long_term_negotiation_llm.py --n 12 --concurrency 4 \\
-        --timeline-labels D6,D8 --modes bilat,tri,quartet,firms3,firms4 --tag ltr_llm_scale
+        --timeline-labels D6,D8 --modes firms2,firms3,firms4 --tag ltr_llm_scale
 
-    # 仅 3+ 家公司互谈
+    # 仅 3 / 4 方
     python scripts/generate_long_term_negotiation_llm.py --n 6 --modes firms3,firms4 \\
         --timeline-labels D6,D8 --tag ltr_llm_firms_only
 
-    # 精确指定每种人数 / 公司数的生成条数（不按 --modes 轮转）：
-    # 8 条 firms3 + 12 条 firms4 + 5 条 bilat + 3 条 quartet
+    # 精确指定每种人数的生成条数（不按 --modes 轮转）：
+    # 8 条 firms3 + 12 条 firms4 + 4 条 firms2
     python scripts/generate_long_term_negotiation_llm.py \\
-        --mode-counts firms3=8,firms4=12,bilat=5,quartet=3 \\
+        --mode-counts firms3=8,firms4=12,firms2=4 \\
         --timeline-labels D6,D8 --concurrency 4 --tag ltr_llm_mix
 
     # 要求说明写入 manifest（generation_spec）
@@ -44,9 +42,6 @@
     # 用更轻的 agent_profile 模型 + 自定义导出文件名
     python scripts/generate_long_term_negotiation_llm.py --n 3 --agent-profile-model gpt-4o-mini \\
         --agent-profile-out long_term_negotiation_llm_agent_profiles.smoke.json
-
-    # 全部六角色（含 investor/regulator）都走 LLM
-    python scripts/generate_long_term_negotiation_llm.py --n 3 --agent-profiles-all-llm
 
     # 想保留旧的硬编码 AgentProfile（不调 LLM 造画像）
     python scripts/generate_long_term_negotiation_llm.py --n 3 --legacy-agent-profiles
@@ -91,7 +86,6 @@ from sotopia.settings.long_term_negotiation.scenario_loader import (
 )
 from sotopia.settings.long_term_negotiation.types import (  # noqa: E402
     NEGOTIATION_LINEUP_FIRMS_ONLY,
-    NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
     NegotiationTimelineParams,
     SESSION_FIRMS_ONLY_ROLE_ORDER,
     SESSION_SPEAKER_ROLE_ORDER,
@@ -117,17 +111,29 @@ NEGOTIATION_LLM_PROMPTS: list[str] = [
     "Neighborhood cafe supply cooperation: independent operators bargain over beans, milk, and pastry batches. "
     "At least two sellers chase the same repeat clients, and each round must reference concrete competitive offers.",
     "Community canteen material purchase: buyer-side organizer compares two or more personal vendors for rice, oil, "
-    "and vegetables; financing support may appear only when cashflow gaps threaten fulfillment.",
-    "Three-person street-commerce rivalry: firm_a (buyer lead), firm_b (incumbent vendor), firm_c (challenger vendor) "
-    "negotiate bundles while competing for identical customer segments and reputation.",
-    "Four-person market-lane competition: firm_a/firms choose among firm_b/firm_c/firm_d style offers where "
-    "multiple individuals run similar businesses and the customer commits to the best comprehensive plan.",
+    "and vegetables; keep terms practical for a volunteer-run kitchen with tight cash limits.",
+    "Three-person street-commerce rivalry: a buyer lead, an incumbent stall, and a challenger stall negotiate "
+    "overlapping bundles while competing for the same walk-by customers and word-of-mouth reputation.",
+    "Four-person market-lane competition: one choosy customer compares three independent sellers who each revise "
+    "bundles (price, extras, pickup window) until one composite plan wins.",
+    "Everyday supermarket run: a single shopper compares two part-time personal shoppers / errand runners who "
+    "bid on the same basket list (substitutions, brand swaps, delivery fee) across several evenings.",
+    "Dorm floor bulk buy: students jointly source snacks, laundry pods, and printer paper from competing "
+    "informal suppliers; one treasurer holds the pooled cash and must reject vague quotes.",
+    "Second-hand swap meet: private individuals haggle over a used bicycle, desk lamp, and textbooks — condition, "
+    "warranty promises, and handoff time matter more than corporate SLAs.",
+    "Apartment block group order: neighbors coordinate a split delivery of rice, cooking oil, and fruit; one "
+    "coordinator negotiates minimum order sizes and per-unit splits with two competing mini-vendors.",
+    "Parent before term start: compares three small stationery booths for backpacks, notebooks, and art kits; "
+    "must weigh kid preferences, total out-of-pocket, and pickup distance.",
+    "Weekend farmers' lane: a home cook sources meat, tofu, and herbs from rival stalls; sellers cite rival "
+    "prices openly and offer tasting samples as leverage.",
+    "Repair plus parts: a tenant negotiates with two independent fixers who each quote labor plus replacement "
+    "parts for a leaking faucet; trust and callback availability drive the choice, not brand logos.",
 ]
 
 _LLM_MODE_TO_LINEUP_N: dict[str, tuple[str, int]] = {
-    "bilat": (NEGOTIATION_LINEUP_FIRMS_ONLY, 2),
-    "tri": (NEGOTIATION_LINEUP_FIRMS_ONLY, 3),
-    "quartet": (NEGOTIATION_LINEUP_FIRMS_ONLY, 4),
+    "firms2": (NEGOTIATION_LINEUP_FIRMS_ONLY, 2),
     "firms3": (NEGOTIATION_LINEUP_FIRMS_ONLY, 3),
     "firms4": (NEGOTIATION_LINEUP_FIRMS_ONLY, 4),
 }
@@ -142,7 +148,7 @@ def modes_cycle_from_arg(s: str) -> list[str]:
 def parse_mode_counts(spec: str) -> list[str] | None:
     """``--mode-counts MODE=N[,MODE=N...]`` 解析。
 
-    例：``firms3=8,firms4=12,bilat=5`` -> 8 条 firms3 + 12 条 firms4 + 5 条 bilat
+    例：``firms3=8,firms4=12,firms2=4`` -> 8 条 firms3 + 12 条 firms4 + 4 条 firms2
     （顺序与逗号片段一致，逐条作为 LLM profile 生成的 mode）。
 
     返回 ``None`` 表示用户未传该参数；走原有 ``--n`` + ``--modes`` 轮转路径。
@@ -252,39 +258,6 @@ def bilateral_timeline_presets_lite() -> list[tuple[str, NegotiationTimelinePara
             ),
         ),
     ]
-
-
-def tri_goal_padding(env: EnvironmentProfile) -> None:
-    """三方 roster 时把 ``agent_goals`` 补到 3 条（LLM 常只写买卖双方）。"""
-    goals = list(env.agent_goals or [])
-    tail = (
-        "<strategy_hint>External financing stakeholder</strategy_hint> "
-        "Provide contingent financing and milestone-based tranches aligned with disclosures."
-    )
-    if len(goals) < 3 and tail not in goals:
-        goals.append(tail)
-    env.agent_goals = goals[:3]
-
-
-def quartet_goal_padding(env: EnvironmentProfile) -> None:
-    """LLM 常输出 2 条 goal；四方 roster 时补齐至 4 条 institutional 视角。"""
-    goals = list(env.agent_goals or [])
-    tails = [
-        (
-            "<strategy_hint>External financing stakeholder</strategy_hint> "
-            "Provide contingent financing and milestone-based tranches aligned with disclosures."
-        ),
-        (
-            "<strategy_hint>Regulatory stakeholder</strategy_hint> "
-            "Maintain filing calendars, substantive thresholds, and procedural gatekeeping."
-        ),
-    ]
-    for t in tails:
-        if len(goals) >= 4:
-            break
-        if t not in goals:
-            goals.append(t)
-    env.agent_goals = goals[:4]
 
 
 def firms3_goal_padding(env: EnvironmentProfile) -> None:
@@ -402,10 +375,15 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
         print("[agent_profiles] mode=handwritten per-environment (legacy constants)")
         agent_profile_source = "handwritten"
     else:
+        if getattr(args, "agent_profiles_all_llm", False):
+            print(
+                "[warn] --agent-profiles-all-llm is ignored: this pipeline only samples LLM "
+                "profiles for firm_a..firm_d; investor/regulator are not session roles here."
+            )
         llm_roles_for_agents = tuple(DEFAULT_COMPANY_LLM_ROLES)
         print(
-            f"[agent_profiles] mode=llm per-environment companies_only={not args.agent_profiles_all_llm} "
-            f"model={agent_profile_model} llm_roles={list(llm_roles_for_agents)}"
+            f"[agent_profiles] mode=llm per-environment firm_roles_llm={list(llm_roles_for_agents)} "
+            f"model={agent_profile_model}"
         )
         agent_profile_source = "llm"
 
@@ -435,7 +413,6 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
 
         mode = _mode_for_idx(idx)
         lineup, n_agents = _lineup_n_for_mode(mode)
-        quartet_eff = lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and n_agents == 4
 
         label, params_eff = presets[variant_i % len(presets)]
         variant_i += 1
@@ -446,7 +423,7 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
             outcome_rule_entropy = secrets.token_hex(16)
         gm = build_negotiation_game_metadata_bundle(
             codename,
-            quartet_eff,
+            False,
             params_eff,
             num_participants=n_agents,
             lineup=lineup,
@@ -488,10 +465,6 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
                 firms4_goal_padding(env_llm)
             elif n_agents == 3:
                 firms3_goal_padding(env_llm)
-        elif n_agents == 4:
-            quartet_goal_padding(env_llm)
-        elif n_agents == 3:
-            tri_goal_padding(env_llm)
 
         env_llm.save()
         env_modes_by_codename[codename] = mode
@@ -552,7 +525,7 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
 
         ltr.persist_scenario_v2(
             env_llm,
-            quartet=quartet_eff,
+            quartet=False,
             params=params_eff,
             tag=args.tag,
             event_anchor_pk=anchor_pk,
@@ -640,19 +613,18 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=3, help="生成条数上限（会与 inspiration 列表截断对齐）")
     ap.add_argument(
         "--modes",
-        default="bilat",
+        default="firms3",
         help=(
-            "逗号分隔、保序轮转：bilat（2 人，with_institutional）/ tri（3 人）/ quartet（4 人）/ "
-            "firms3（3 家公司，无机构位）/ firms4（4 家公司，无机构位）；对第 i 条 LLM 结果按列表循环取模式。"
-            "若同时指定 --mode-counts，则忽略本参数。"
+            "逗号分隔、保序轮转：仅 firms2 / firms3 / firms4（均为 firms_only）。"
+            "对第 i 条 LLM 结果按列表循环取模式。若同时指定 --mode-counts，则忽略本参数。"
         ),
     )
     ap.add_argument(
         "--mode-counts",
         default="",
         help=(
-            "按模式精确指定生成条数：MODE=N[,MODE=N...]；例 firms3=8,firms4=12,bilat=5。"
-            "传入后总条数 = 各 N 之和，--n 与 --modes 仅在未传时生效。合法 MODE 与 --modes 相同。"
+            "按模式精确指定生成条数：MODE=N[,MODE=N...]；例 firms3=8,firms4=12,firms2=4。"
+            "传入后总条数 = 各 N 之和，--n 与 --modes 仅在未传时生效。合法 MODE：firms2/firms3/firms4。"
         ),
     )
     ap.add_argument(
@@ -694,7 +666,7 @@ def main() -> int:
     ap.add_argument(
         "--agent-profiles-all-llm",
         action="store_true",
-        help="四角色均用 LLM（含 investor/regulator）；默认仅 firm_a/firm_b 两家公司走 LLM",
+        help="兼容旧 CLI：仅 firm_a..firm_d 可走 LLM；传此参数会告警并忽略（本脚本无 investor/regulator 会话）。",
     )
     ap.add_argument(
         "--legacy-agent-profiles",

@@ -24,9 +24,9 @@ from sotopia.messages.message_classes import (
     ScriptInteraction,
     ScriptInteractionReturnType,
 )
-from sotopia.utils import format_docstring
+from sotopia.utils import format_docstring, truncate_chars
 
-from sotopia.agents.memory_summarization import truncate_chars
+
 
 from sotopia.generation_utils.output_parsers import (
     OutputParser,

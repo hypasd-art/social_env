@@ -85,9 +85,10 @@ class PydanticOutputParser(OutputParser[T], Generic[T]):
                 f"{self.pydantic_object.__name__}; will trigger format_bad_output repair."
             )
         if isinstance(json_result, dict) and "properties" in json_result:
-            return self.pydantic_object.model_validate_json(
-                json.dumps(json_result["properties"])
-            )
+            inner = json_result["properties"]
+            if context is not None:
+                return self.pydantic_object.model_validate(inner, context=context)
+            return self.pydantic_object.model_validate_json(json.dumps(inner))
         else:
             data = json_result
 

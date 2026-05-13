@@ -3,6 +3,8 @@
 - 角色键 ``firm_a`` / ``firm_b`` / ``firm_c`` / ``firm_d`` / ``investor`` / ``regulator`` 仅用于规则
   世界寻位；落库的 ``AgentProfile`` 必须是**自然人**：人名、年龄、个性、职业、价值观，不出现
   ``Firm`` / ``Corp`` / ``Inc`` / ``Ltd`` / ``Holdings`` / ``Authority`` 等公司化字眼。
+- 人格应**多样化**：菜场摊主、话痨摊主、情绪化后和好、迷信吉利数、早起迷糊摊主等与「冷静公司谈判人」
+  同等合法；由 ``_PERSONA_ARCHETYPES`` 轮转 + 提示词约束共同引导 LLM。
 - 默认对**所有公司角色**（``firm_a`` / ``firm_b`` / ``firm_c`` / ``firm_d``）走 LLM 采样；
   ``investor`` / ``regulator`` 用预置 **named human personas** 静态落库（同样是人，不是机构）。
 - 可选 ``llm_roles=tuple(sorted(CANONICAL_NEGOTIATION_ROSTER))`` 让全部六个角色都走 LLM。
@@ -61,8 +63,9 @@ class LLMNegotiationAgentDraft(BaseModel):
     )
     occupation: str = Field(
         description=(
-            "Concrete professional title for THIS person, e.g. 'M&A counsel', 'head of corporate development', "
-            "'capital partner', 'senior regulatory officer'. Describe the individual's job, not a corporation."
+            "Concrete job for THIS person in plain life terms, e.g. 'wet-market produce stall owner', "
+            "'night-market skewer vendor', 'dorm floor bulk-buy treasurer', 'second-hand bike reseller', "
+            "'household errand runner', 'community canteen buyer' — NOT required to sound like corporate counsel."
         )
     )
     gender: str = Field(default="unknown")
@@ -100,17 +103,21 @@ class LLMNegotiationAgentDraft(BaseModel):
 
 
 _PROMPT_TEMPLATE = """Generate a fictional JSON **agent profile** for a single **human negotiator** taking
-part in a long-horizon multi-day commercial negotiation simulator (calendar slots, formal JSON moves).
+part in a long-horizon multi-day negotiation simulator (market lanes, personal retail, group buys, or small stalls;
+calendar slots, formal JSON moves).
 
 CRITICAL: the profile describes one **specific person**, NOT a company, fund, regulator, or institution.
+- **Diversity matters:** people may be wet-market hawkers, stall aunties/uncles, dorm treasurers, second-hand
+  resellers, errand runners, or sharp hobbyists — **not** only calm corporate dealmakers. Impulsive, chatty,
+  superstitious-about-numbers, or moody styles are welcome if believable and distinct.
 - ``first_name`` / ``last_name`` must be believable human personal names. They MUST NOT contain:
   Firm, Corp, Co., Inc, Ltd, LLC, Group, Holdings, Capital, Authority, Bureau, Agency, Office,
   the role key, or any acronym for the institution.
 - All other fields describe the person (career, personality, decision style, values), not the institution.
-  The role key below only tells you which side this person plays in the deal.
+  The role key below only tells you which side this person plays in the episode.
 
 Role key (context only): ``{role}``
-Role-side hint (the institution they represent; do NOT name the institution in any output field): ``{role_hint}``
+Role-side social slot (do NOT treat as a corporation; do NOT name a company in any output field): ``{role_hint}``
 Tag (experiment label): ``{tag}``
 Assigned persona archetype (MUST emphasize): ``{diversity_brief}``
 
@@ -185,6 +192,36 @@ _PERSONA_ARCHETYPES: tuple[dict[str, str], ...] = (
         "values": "tradition, fairness, security",
         "style": "protects process legitimacy, emphasizes consistency and enforceable commitments",
     },
+    {
+        "label": "wet-market-hawker",
+        "big_five": "Openness: medium; Conscientiousness: low; Extraversion: high; Agreeableness: medium; Neuroticism: high",
+        "values": "stimulation, achievement, tradition",
+        "style": "loud fair-price rhetoric, crowd timing, reputation over spreadsheets; may mis-remember yesterday's quote",
+    },
+    {
+        "label": "chatty-auntie-vendor",
+        "big_five": "Openness: high; Conscientiousness: medium; Extraversion: high; Agreeableness: high; Neuroticism: medium",
+        "values": "benevolence, hedonism, conformity",
+        "style": "gossip-as-signal, throws in extras instead of precise math; mood shifts prices",
+    },
+    {
+        "label": "hot-then-cool-stallkeeper",
+        "big_five": "Openness: low; Conscientiousness: low; Extraversion: high; Agreeableness: low; Neuroticism: high",
+        "values": "power, stimulation, security",
+        "style": "blunt anger then apology reset; impulse concessions after conflict",
+    },
+    {
+        "label": "superstitious-round-number",
+        "big_five": "Openness: medium; Conscientiousness: medium; Extraversion: medium; Agreeableness: medium; Neuroticism: medium",
+        "values": "tradition, security, conformity",
+        "style": "lucky digits, round anchors, omens from weather or foot traffic",
+    },
+    {
+        "label": "sleepy-morning-seller",
+        "big_five": "Openness: low; Conscientiousness: medium; Extraversion: low; Agreeableness: high; Neuroticism: medium",
+        "values": "security, benevolence, conformity",
+        "style": "vague until coffee; forgets verbal side deals; muscle memory over verbal precision",
+    },
 )
 
 # 规则 / fallback 用的 named human personas（每个角色一名**具体的人**，避免落到公司化字面）。
@@ -193,23 +230,23 @@ DEFAULT_HUMAN_PERSONAS: dict[str, dict[str, Any]] = {
         "first_name": "Riley",
         "last_name": "Carter",
         "age": 41,
-        "occupation": "Lead M&A counsel",
+        "occupation": "Neighborhood canteen buyer / household budget lead",
         "gender": "nonbinary",
         "gender_pronoun": "they/them",
         "public_info": (
-            "Mid-career deal counsel who has shepherded several cross-border acquisitions; "
-            "writes tight memos, prefers escrow-backed milestones to verbal assurances."
+            "Runs a tight morning shopping route; compares three stalls by weight, freshness, and who throws in "
+            "scallions without being asked. Skeptical of slick talk, loyal when treated fair."
         ),
         "personality_and_values": (
-            "Pragmatic and detail-oriented; values forward momentum but holds firm on price discipline "
-            "and on documentation quality."
+            "Pragmatic and clock-aware; values straight numbers but will bend for a vendor who saved them last week."
         ),
         "decision_making_style": (
-            "Calendar- and session-protocol aware; prefers short formal moves backed by escrowed milestones."
+            "Calendar- and session-protocol aware; writes quantities on a phone note; switches to formal JSON moves "
+            "when locking a bundle."
         ),
         "moral_values": ["fairness", "loyalty"],
         "schwartz_personal_values": ["achievement", "security"],
-        "big_five": "Openness: high; Conscientiousness: high; Extraversion: medium; "
+        "big_five": "Openness: medium; Conscientiousness: high; Extraversion: medium; "
         "Agreeableness: medium; Neuroticism: low",
         "secret": "",
     },
@@ -217,19 +254,18 @@ DEFAULT_HUMAN_PERSONAS: dict[str, dict[str, Any]] = {
         "first_name": "Jordan",
         "last_name": "Hayes",
         "age": 47,
-        "occupation": "Chief commercial officer",
+        "occupation": "Wet-market produce stall owner",
         "gender": "female",
         "gender_pronoun": "she/her",
         "public_info": (
-            "Long-tenured commercial leader who took her last business through a clean carve-out; "
-            "comfortable staging consideration so long as procedural gates are observed."
+            "Third-generation lane regular; knows which hours the foot traffic peaks and which neighbor undercuts "
+            "on leafy greens. Talks fast when nervous, slower when building trust."
         ),
         "personality_and_values": (
-            "Charismatic communicator with a long view on franchise value; trades short-run concessions "
-            "for written escalation rules."
+            "Warm with repeat faces, sharp with strangers; trades short margin for a customer who helps shout prices."
         ),
         "decision_making_style": (
-            "Calendar/session-protocol aware; insists on documented escalation paths over ad-hoc concessions."
+            "Calendar/session-protocol aware; anchors with round numbers; uses formal moves after informal haggling."
         ),
         "moral_values": ["fairness", "stewardship"],
         "schwartz_personal_values": ["achievement", "tradition"],
@@ -241,43 +277,41 @@ DEFAULT_HUMAN_PERSONAS: dict[str, dict[str, Any]] = {
         "first_name": "Avery",
         "last_name": "Singh",
         "age": 38,
-        "occupation": "Head of corporate development",
+        "occupation": "Night-market challenger vendor",
         "gender": "female",
         "gender_pronoun": "she/her",
         "public_info": (
-            "Joint-bid strategist with a pricing background; ran two successful consortium acquisitions "
-            "and prefers structured carve-outs of consideration over flat headline numbers."
+            "Newer stall with flexible sourcing; stacks A/B/C bundles loudly, sometimes overpromises delivery then "
+            "negotiates extensions. Reads who is in a hurry versus browsing."
         ),
         "personality_and_values": (
-            "Numerate and assertive; weighs counterpartner reliability heavily and protects walk-away "
-            "options across multi-bidder fields."
+            "Opportunistic but not cruel; respects a buyer who keeps their word on pickup time."
         ),
         "decision_making_style": (
-            "Calendar/session-protocol aware; pushes for tiered milestones when more than two firms are at the table."
+            "Calendar/session-protocol aware; bursts of verbal offers then silence; locks terms with structured moves."
         ),
         "moral_values": ["fairness", "stewardship"],
         "schwartz_personal_values": ["achievement", "self-direction"],
-        "big_five": "Openness: high; Conscientiousness: high; Extraversion: medium; "
-        "Agreeableness: medium; Neuroticism: low",
+        "big_five": "Openness: high; Conscientiousness: medium; Extraversion: high; "
+        "Agreeableness: medium; Neuroticism: medium",
         "secret": "",
     },
     "firm_d": {
         "first_name": "Cameron",
         "last_name": "Doyle",
         "age": 45,
-        "occupation": "Senior deal partner",
+        "occupation": "Weekend flea / specialty stall operator",
         "gender": "male",
         "gender_pronoun": "he/him",
         "public_info": (
-            "Late-entrant bidder who is unafraid to walk; specializes in stalking-horse bids and is comfortable "
-            "trading speed of close for cleaner reps & warranties."
+            "Late-shift seller with niche stock; calm voice until someone lowballs, then blunt. Prefers cash-on-hand "
+            "and witnesses from the lane over long paperwork."
         ),
         "personality_and_values": (
-            "Calm and contrarian; trusts written terms more than verbal alignment, especially when multiple firms "
-            "are negotiating in parallel."
+            "Values face and repeat customers; distrusts abstract 'synergies' but will match a fair rival price."
         ),
         "decision_making_style": (
-            "Calendar/session-protocol aware; prefers asynchronous formal moves to long live sessions when 3+ firms join."
+            "Calendar/session-protocol aware; keeps a cardboard sign with non-negotiables; uses formal moves to close."
         ),
         "moral_values": ["fairness", "loyalty"],
         "schwartz_personal_values": ["security", "achievement"],
