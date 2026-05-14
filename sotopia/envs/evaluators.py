@@ -24,6 +24,22 @@ log = logging.getLogger("evaluators")
 T_eval_dim = TypeVar("T_eval_dim", bound=BaseModel)
 
 
+def _normalize_dimension_score_0_to_10(dimension: str, score: int | float) -> float:
+    """把不同量纲的维度分统一映射到 [0, 10]。"""
+    # 默认已是 0..10（believability/knowledge/goal 等）
+    lo, hi = 0.0, 10.0
+    d = str(dimension or "").strip().lower()
+    if d in {"relationship", "financial_and_material_benefits"}:
+        lo, hi = -5.0, 5.0
+    elif d in {"secret", "social_rules"}:
+        lo, hi = -10.0, 0.0
+    v = float(score)
+    v = max(lo, min(hi, v))
+    if hi <= lo:
+        return 0.0
+    return (v - lo) * 10.0 / (hi - lo)
+
+
 class EvaluationForAgents(LLMEvalBaseModel, Generic[T_eval_dim]):
     evaluations: dict[str, T_eval_dim]
 
@@ -184,6 +200,8 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
         messages: list[tuple[str, Message]] | None,
         history: str = "",
         temperature: float | None = 0.0,
+        *,
+        num_agents_override: int | None = None,
         **kwargs: Any,
     ) -> list[tuple[str, tuple[tuple[str, int | float | bool], str]]]:
         # 中文注释：该评估器在“整段历史”上做一次 LLM 评分，
@@ -215,6 +233,10 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                     if speaker != "Environment":
                         participating_agents.add(speaker)
             num_agents = len(participating_agents)
+            if num_agents <= 0 and num_agents_override is not None and int(num_agents_override) > 0:
+                # 仅传 history、不传 messages 的路径（如长期谈判终局评测）：无法从消息统计人数，
+                # 由调用方显式给出参与者数，否则下方 [:num_agents] 会变成 [:0] 丢弃全部维度。
+                num_agents = int(num_agents_override)
 
             # 中文注释：明确要求模型使用固定 key（agent_1 ... agent_n），
             # 降低 structured output 中动态键名带来的解析歧义。
@@ -267,6 +289,7 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                             history=history,
                             agent_instruction=agent_instruction,
                             extra=extra,
+                            agent="terminal_evaluator",
                         ),
                         output_parser=PydanticOutputParser[self.response_format_class](  # type: ignore[name-defined]
                             pydantic_object=self.response_format_class
@@ -299,16 +322,22 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
             if response is None:
                 raise last_exc or RuntimeError("Evaluator failed after 3 attempts")
             response_list = []
+            eval_values = list(response.evaluations.values())
             # 中文注释：只消费真实参与 agent 的评估，避免越界或脏键。
-            # Only process evaluations for the actual number of agents.
+            # messages 为空且未 override 时 num_agents==0，不得以 [:0] 截断；改为使用解析到的条数。
+            if num_agents > 0:
+                n_use = min(num_agents, len(eval_values))
+            else:
+                n_use = len(eval_values)
+            if n_use <= 0:
+                log.warning("[evaluator] parsed response but evaluations list is empty")
+                return []
             # 中文注释：每个维度（如 believability）现在是
             #     {"reasoning": str, "score": int}
             # 老代码用 [1]/[0] 当 score/reasoning 索引，会抛 KeyError(1)
             # 被外层 except 静默吞掉，导致 evaluator 输出全部丢失，
             # 下游 p1_rate/p2_rate=None → rewards=[0,0] → 整局被 quarantine。
-            for i, evaluation in enumerate(
-                list(response.evaluations.values())[:num_agents]
-            ):
+            for i, evaluation in enumerate(eval_values[:n_use]):
                 agent_key = f"agent_{i+1}"
                 dump = evaluation.model_dump()
                 for dimension, value in dump.items():
@@ -320,11 +349,14 @@ class EpisodeLLMEvaluator(Evaluator, Generic[T_eval_dim]):
                         reasoning, score = value[0], value[1]
                     else:
                         score, reasoning = 0, str(value)
+                    norm_score = _normalize_dimension_score_0_to_10(
+                        dimension, score if isinstance(score, (int, float)) else 0.0
+                    )
                     response_list.append(
                         (
                             agent_key,
                             (
-                                (dimension, score),
+                                (dimension, norm_score),
                                 reasoning,
                             ),
                         )

@@ -83,6 +83,79 @@ Return **only** one JSON object as specified (no preamble, no markdown outside t
 {format_instructions}
 """
 
+MULTI_PARTY_NEGOTIATION_SKILL = """
+## Multi-party negotiation skill (MANDATORY — apply every session)
+
+You are in a multi-party marketplace. Your success depends on actively engaging with
+MULTIPLE counterparties, not fixating on one. The best negotiators shop around.
+
+### Core tactics (execute every session):
+1. **Shop around before committing** — Before accepting any offer, communicate with ALL available
+   counterparties to compare terms. Never accept the first offer without checking alternatives.
+2. **Cross-reference offers** — Use information from one party's bid to negotiate better terms
+   with another. Let them know you have alternatives: "Vendor B offered delivery by Tuesday —
+   can you match that?"
+3. **Play rivals against each other** — If two parties compete for the same deal, let each know
+   the other is bidding. Create healthy bidding tension without fabricating fake offers.
+4. **Coalition awareness** — Know who competes with whom. Temporarily ally with one rival to
+   pressure a third. But be ready to switch partners when it benefits your goal.
+5. **Maximize total gain, not just close any deal** — Your goal is the BEST achievable deal
+   across all possible counterparty combinations. Track your BATNA (best alternative to
+   negotiated agreement) across all active counterparties.
+6. **Information arbitrage** — What one party reveals in conversation may give you leverage
+   with another. Use market intelligence strategically, without betraying confidential numbers.
+
+### Role-specific tactics:
+- **Buyer / procurement lead**: Solicit bids from EVERY seller in the roster. Compare total bundles
+  (price + delivery + quality). Make sellers visibly aware they are being compared. Negotiate with
+  at least 2 sellers before committing to any deal.
+- **Incumbent seller / primary vendor**: Remind buyers of your track record vs. unproven challengers.
+  Offer loyalty perks. Consider temporary price coordination with other incumbents to block a
+  challenger from gaining a foothold. Talk to all buyers, not just your regulars.
+- **Challenger seller**: Attack incumbent weaknesses openly. Offer trial periods or money-back
+  guarantees. Undercut on price but upsell on volume commitments. Target the incumbent's most
+  dissatisfied customer first. Talk to every buyer about what they dislike about current suppliers.
+- **Late entrant / specialist**: Identify the weakest link among incumbents. Frame premium quality
+  as insurance against incumbent failures. Don't compete on price alone — compete on trust and
+  reliability. Engage all parties to find the gap no one else is filling.
+
+### Business tactics toolkit:
+- **Anchoring**: Open with an aggressive but defensible number to set the negotiation range in your favor.
+- **Concession patterning**: Make each concession smaller than the last. Never give something for nothing —
+  always ask for a reciprocal concession ("If I give you X, I need Y in return").
+- **Deadline leverage**: Use time pressure strategically. If you know a counterparty faces end-of-day costs
+  or inventory spoilage, press for better terms as the window closes.
+- **Bundle vs. unbundle**: Negotiate the full package (price + delivery + quality + penalties) not just price.
+  Concede on low-cost items you don't care about to win on high-value items you do.
+- **Walk-away credibility**: Be willing to walk away — and let the other side see it. A deal you don't need
+  is your strongest bargaining position.
+- **Nibbling**: After the main terms are agreed, ask for small extras ("and include delivery by Tuesday, right?").
+- **Silence as pressure**: After making an offer or counter-offer, stay quiet. Let the other side fill the silence —
+  they often concede first.
+
+### Dialogue templates (adapt to your DialogueVoice):
+- **Opening comparison**: "I'm talking to a few vendors today. What's your best offer on [product] so I can
+  compare fairly?"
+- **Cross-referencing**: "Another seller quoted me [X] with [Y] delivery. Can you do better, or should I
+  take their deal?"
+- **Creating urgency**: "I need to close by [timeframe]. If we can agree on terms now, the business is yours.
+  Otherwise I'll need to move on."
+- **Concession exchange**: "I can come up on price if you extend the warranty to 30 days. That's fair for both of us."
+- **Defending against undercut**: "Their price is lower, yes — but last month their delivery was late twice.
+  You're paying for reliability, not just the product."
+- **Building coalition**: "If we both hold firm on [term], the buyer can't play us against each other.
+  There's enough business for both of us if we don't race to the bottom."
+- **Closing the deal**: "We're close. If you can meet me at [final offer], we sign now and I stop talking
+  to the others. Deal?"
+
+### Anti-patterns (strictly avoid):
+- Do NOT fixate on a single counterparty for the entire session.
+- Do NOT accept a deal without engaging at least 2 alternative counterparties first.
+- Do NOT reveal one party's exact private numbers to another party (use ranges, comparisons,
+  or non-specific hints like "below market" or "more competitive than your quote").
+- Do NOT stay silent while rivals negotiate — be visible, be active, be memorable.
+"""
+
 
 class NegotiationSocialLLMAgent(SocialLLMAgent):
     """在长周期短时记忆通路（``SocialLLMAgent``）上叠加谈判动作协议提示。"""
@@ -262,7 +335,6 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
 
     async def aact(self, obs: Observation) -> AgentAction:
         self.recv_message("Environment", obs)
-
         if self._goal is None:
             obs_nl = self._rewrite_nl_for_prompt(self.inbox[0][1].to_natural_language())
             viewer_ctx = self._action_instruction_block(obs)
@@ -278,7 +350,7 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
                     "do not contradict the protocol.\n"
                     f"{viewer_ctx}"
                 ),
-                agent=self.agent_name,
+                agent=self._prompt_self_label(),
             )
 
         if len(obs.available_actions) == 1 and "none" in obs.available_actions:
@@ -411,12 +483,14 @@ def build_negotiation_social_llm_agents(
             "- Reuse exact `negotiation_op` / `verb` tokens from the Environment; do not invent op names.\n"
             "- Respect calendars, session caps, and scheduling rules; advance your interests without hallucinating "
             "others' private numbers unless visible under `[contracts_visible_to_you]` or said in-session."
+            f"\n\n{MULTI_PARTY_NEGOTIATION_SKILL}"
         )
         agents[role] = ag
     return agents
 
 
 __all__ = [
+    "MULTI_PARTY_NEGOTIATION_SKILL",
     "NEGOTIATION_LLM_CUSTOM_TEMPLATE",
     "NegotiationSocialLLMAgent",
     "build_negotiation_social_llm_agents",

@@ -185,6 +185,15 @@ def _sanitize_schema_name(name: str) -> str:
     return "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in name)
 
 
+def _is_response_format_unavailable_error(exc: BaseException) -> bool:
+    """检测 API 不支持 structured output / response_format 的错误。"""
+    msg = str(exc).lower()
+    return (
+        "response_format" in msg
+        and ("unavailable" in msg or "not supported" in msg or "unsupported" in msg)
+    ) or "response_format type is unavailable" in str(exc)
+
+
 def _build_json_schema_response_format(
     pydantic_class: type[BaseModel],
 ) -> dict[str, Any]:
@@ -403,6 +412,8 @@ async def agenerate(
         }
         if temperature_value is not None:
             completion_kwargs["temperature"] = temperature_value
+        # if "deepseek" in model_name:
+        #     completion_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         response = await acompletion(**completion_kwargs)
     else:
         # 中文注释：普通文本输出分支（不带 response_format）。
@@ -416,6 +427,8 @@ async def agenerate(
         }
         if temperature_value is not None:
             completion_kwargs["temperature"] = temperature_value
+        # if "deepseek" in model_name:
+        #     completion_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         response = await acompletion(**completion_kwargs)
     result = response.choices[0].message.content
 
@@ -447,8 +460,8 @@ async def agenerate(
     agent_name = input_values.get("agent", "")
     log_prefix = f" [{agent_name}]" if agent_name else ""
     log.debug(f"Model: {model_name}")
-    log.debug(f"Prompt: {messages}")
-    log.info(f"Generated result{log_prefix}: {parsed_result}")
+    log.debug(f"Prompt: {messages}\nresponse: {result}")
+    # log.info(f"Generated result{log_prefix}: {parsed_result}")
     try:
         from sotopia.settings.long_term_negotiation.model_trace import record_generation_step
 
@@ -620,6 +633,32 @@ async def agenerate_action(
             context=validation_context,
         )
     except Exception as e:
+        # structured output 不受支持时（如 DeepSeek），回退到非 structured 模式重试一次
+        if structured_output and _is_response_format_unavailable_error(e):
+            log.warning(
+                "structured output unavailable for %s; retrying without response_format",
+                model_name,
+            )
+            try:
+                return await agenerate_action(
+                    model_name=model_name,
+                    agent=agent,
+                    turn_number=turn_number,
+                    history=history,
+                    action_types=action_types,
+                    goal=goal,
+                    agent_names=agent_names,
+                    sender=sender,
+                    temperature=temperature,
+                    structured_output=False,
+                    custom_template=custom_template,
+                    script_like=script_like,
+                    bad_output_process_model=bad_output_process_model,
+                    use_fixed_model_version=use_fixed_model_version,
+                )
+            except Exception as e2:
+                log.warning(f"Failed to generate action (fallback) due to {e2}")
+                return AgentAction(action_type="none", argument="", to=[])
         log.warning(f"Failed to generate action due to {e}")
         return AgentAction(action_type="none", argument="", to=[])
 

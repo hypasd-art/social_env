@@ -10,9 +10,10 @@
         "strict_design_v1": bool,
         "timeline": NegotiationTimelineParams 的 dict（``dataclasses.asdict`` 形态）
         "codename": str,
-        "predefined_outcome_rule": dict,  # v1；合成时可带 ``outcome_rule_entropy`` 以 diversify 种子
+        "predefined_outcome_rule": dict,  # v1；含 ``payout_mode``：``margin_split``（合资分红）或 ``procurement_savings``（零售价低于参考价）；合成时可带 ``outcome_rule_entropy``
         "predefined_news_briefs": list[dict],  # 与 scenario_text / environment_context / 阵容绑定；可含 ``scenario_relevance: "decoy"`` 的干扰条，条数随场景变化
         "deal_closure_pressure": dict,  # v1；对 1–2 名参与者附加「须在本 episode 内尽量成交」的叙事压力（软约束，仅进私有 goal）
+        "dialogue_style": dict,  # v1；对话风格合成/终局 LLM 评测 rubric（见 scenario_loader 常量）
         "negotiation_relationship_design": dict,  # firm 两两竞争等设计约束（见 scenario_loader 返回）
         ...
     }
@@ -40,6 +41,34 @@ from .types import (
     SUPPORTED_NEGOTIATION_LINEUPS,
     negotiation_role_order,
 )
+
+#: 追加到 ``agenerate_env_profile`` 的 inspiration 末尾，约束场景与目标中的**可区分对话风格**。
+DIALOGUE_STYLE_SYNTHESIS_APPEND_EN = """
+[dialogue_style_synthesis — benchmark mandatory]
+1) **Per-role spoken identity:** In `scenario` and each `agent_goals` entry, make *dialogue style* explicit: default register
+(plain / formal / blunt / warm), typical openers or fillers, pacing (terse vs chatty), taboos (numbers-first vs story-first),
+and how refusals or concessions sound. Styles MUST differ across roster so transcripts are not interchangeable.
+2) **Competitive tone differentiation — REQUIRED:** Each role's dialogue style MUST encode a distinct competitive posture:
+   - At least one role uses *aggressive challenger* tone (fast-paced, undercuts openly, names rival weaknesses).
+   - At least one role uses *defensive incumbent* tone (warm but guarded, deflects price attacks with quality narrative).
+   - If 3+ roles, include a *calculating latecomer* tone (precise, cites scarcity, frames premium as insurance).
+   Competitive voices must sound like real marketplace rivals, not polite committee members.
+3) **Scene-appropriate voice:** Wet-market talk may be rapid, sensory, gossip-as-signal; coopetition may mix cautious
+promises with competitive hedges; scheduling scenes keep time/slot jargon natural without collapsing into generic legal boilerplate.
+4) **No schema echo:** Never paste JSON Schema boilerplate into narrative fields.
+""".strip()
+
+#: 终局 ``EpisodeLLMEvaluator`` 历史前缀：指导将「对话风格执行」并入现有维度（believability / knowledge / goal 等）。
+DIALOGUE_STYLE_EVAL_RUBRIC_EN = """
+When scoring each participant, explicitly weight **dialogue-style execution**:
+- **believability:** Does speech match the stated persona (register, pacing, hedges) and remain distinct from other agents?
+- **knowledge:** Are leaks, vagueness, or feints plausible for that voice?
+- **goal:** Does tone support or undermine declared objectives?
+- **competitive authenticity:** Does the agent's speech reflect genuine marketplace rivalry? Penalize agents who
+  sound like polite committee members when their persona demands aggressive undercutting, reputation attacks,
+  or defensive maneuvering. Reward agents whose dialogue conveys real competitive stakes.
+Penalize monotone corporate-speak if the scenario promised differentiated voices; penalize near-identical phrasing across agents.
+""".strip()
 
 
 def _bounded(v: float, lo: float, hi: float) -> float:
@@ -92,8 +121,17 @@ def _build_predefined_outcome_rule(
     num_participants: int,
     scenario_text: str = "",
     outcome_rule_entropy: str | None = None,
+    scene_type: str | None = None,
 ) -> dict[str, Any]:
     """构造 ``predefined_outcome_rule`` v1。
+
+    **payout_mode**（由 ``scene_type`` 驱动）：
+
+    - ``wet_market_competition`` / ``competitive_bidding`` → ``procurement_savings``：
+      用主合同 ``terms.price`` 相对 ``reference_unit_price`` 的节省比例计
+      ``negotiation_predefined_rule_score``，现金结算按 ``buyer_roles``/``seller_roles`` 写入
+      ``negotiation_predefined_rule_individual_profit_*``（见 ``negotiation_metrics``）。
+    - 其余常见场景类型 → ``margin_split``：沿用 margin×合同额与公司/个人分成。
 
     ``outcome_rule_entropy``：非空时混入 ``deterministic_seed`` 的哈希输入，使同一
     ``codename + scenario_text`` 前缀下仍可得到不同合同经济参数（LLM 批量合成默认需要）；
@@ -129,8 +167,94 @@ def _build_predefined_outcome_rule(
     # Personal payoff: each role's individual score takes a slice of its company benefit.
     individual_income_share = {role: float(rng.uniform(0.3, 0.75)) for role in roles}
 
+    st = str(scene_type or "wet_market_competition")
+
+    # 个人采购 / 竞价：评测与结算走 ``payout_mode=procurement_savings``（成交价 vs 参考价），
+    # 不用 margin×合同价 的分红口径。见 ``negotiation_metrics._compute_procurement_savings_metrics``。
+    _procurement_scenes = frozenset({"wet_market_competition", "competitive_bidding"})
+    if st in _procurement_scenes:
+        reference_unit_price = float(rng.uniform(175.0, 395.0))
+        buyer_roles = [company_roles[0]] if company_roles else ["firm_a"]
+        seller_roles = [r for r in company_roles if r not in buyer_roles]
+        score_weights_wm: dict[str, float] = {
+            "terminal_success": 0.22,
+            "primary_contract": 0.20,
+            "solvency": 0.18,
+            "liquidity_preserved": 0.15,
+            "predefined_rule": 0.25,
+        }
+        score_weights_cb: dict[str, float] = {
+            "terminal_success": 0.20,
+            "primary_contract": 0.22,
+            "solvency": 0.17,
+            "liquidity_preserved": 0.13,
+            "predefined_rule": 0.28,
+        }
+        score_weights = score_weights_cb if st == "competitive_bidding" else score_weights_wm
+        closure_pool = float(rng.uniform(5.0, 16.0)) * max(1, len(seller_roles))
+        return {
+            "version": "v1",
+            "rule_profile": "procurement_savings",
+            "payout_mode": "procurement_savings",
+            "contract_name": f"predefined_{codename}_main_contract",
+            "deterministic_seed": seed,
+            "contract_value_if_signed": contract_value,
+            "reference_unit_price": reference_unit_price,
+            "full_score_savings_fraction": float(rng.uniform(0.12, 0.22)),
+            "savings_cash_scale": 1.0,
+            "seller_closure_bonus_total": closure_pool,
+            "buyer_roles": list(buyer_roles),
+            "seller_roles": list(seller_roles),
+            "news_signal": news_signal,
+            "profit_margin_bounds": [profit_margin_bounds[0], profit_margin_bounds[1]],
+            "margin_formula": {
+                "base_margin": base_margin,
+                "news_weight": 0.55,
+                "execution_weight": 0.45,
+            },
+            "company_profit_share": {},
+            "individual_income_share": {},
+            "score_weights": score_weights,
+            "notes": (
+                "Procurement-style rule: primary score uses agreed terms.price vs reference_unit_price "
+                "(buyer savings). Cash settlement credits buyers with per-unit savings × savings_cash_scale "
+                "and optional seller_closure_bonus_total. Requires larger savings fraction for full score "
+                "(higher competitive bar). Not a joint-venture margin split."
+            ),
+        }
+
+    profile = "wet_market_competition"
+    score_weights: dict[str, float] = {
+        "terminal_success": 0.25,
+        "primary_contract": 0.10,
+        "solvency": 0.25,
+        "liquidity_preserved": 0.25,
+        "predefined_rule": 0.15,
+    }
+    if st in {"business_coopetition", "business_outsourcing"}:
+        profile = "business_coopetition"
+        score_weights = {
+            "terminal_success": 0.25,
+            "primary_contract": 0.25,
+            "solvency": 0.15,
+            "liquidity_preserved": 0.10,
+            "predefined_rule": 0.25,
+        }
+    elif st == "resource_scheduling_management":
+        profile = "resource_scheduling_management"
+        score_weights = {
+            "terminal_success": 0.20,
+            "primary_contract": 0.20,
+            "solvency": 0.15,
+            "liquidity_preserved": 0.10,
+            "predefined_rule": 0.15,
+            "scheduling_effectiveness": 0.20,
+        }
+
     return {
         "version": "v1",
+        "rule_profile": profile,
+        "payout_mode": "margin_split",
         "contract_name": f"predefined_{codename}_main_contract",
         "deterministic_seed": seed,
         "contract_value_if_signed": contract_value,
@@ -143,10 +267,11 @@ def _build_predefined_outcome_rule(
         "news_signal": news_signal,
         "company_profit_share": company_profit_share,
         "individual_income_share": individual_income_share,
+        "score_weights": score_weights,
         "notes": (
-            "Predefined scoring rule generated at data-construction time. "
+            "Predefined scoring rule generated at data-construction time (margin-split / joint payoff). "
             "Narrative roles are individuals (vendors/buyers); canonical ids remain firm_* for the simulator. "
-            "Keys company_profit_share refer to those principal roles; evaluation may map them to individual payoffs."
+            "Keys company_profit_share refer to those principal roles; evaluation maps them via individual_income_share."
         ),
     }
 
@@ -174,14 +299,15 @@ def _collect_scenario_bound_news_threads(
         add("perishable_supply_and_cold_chain_squeeze")
         add("parallel_vendors_price_overlap_and_reputation_risk")
         add("buyer_basket_comparison_and_substitution_threat")
-    elif scene == "business_outsourcing":
+    elif scene in {"business_outsourcing", "business_coopetition"}:
         add("labor_bench_shortage_and_skill_mismatch")
         add("milestone_acceptance_disputes_and_change_orders")
         add("subcontractor_chain_liability_and_payment_lag")
-    elif scene == "competitive_bidding":
+    elif scene in {"competitive_bidding", "resource_scheduling_management"}:
         add("bid_spread_manipulation_rumors_and_leakage_risk")
         add("technical_compliance_vs_headline_price_tradeoff")
         add("evaluation_committee_split_and_procurement_delay")
+        add("multi_party_default_blame_and_partial_performance")
     else:
         # 未知 scene：用语义关键词回退
         if any(w in txt for w in ("wet market", "stall", "produce", "foot traffic", "hawker", "spoil")):
@@ -216,6 +342,45 @@ def _collect_scenario_bound_news_threads(
     return threads[:8]
 
 
+def _news_delivery_day(
+    thread_id: str,
+    calendar_days: int,
+    *,
+    rng: random.Random,
+    relevance: str = "scenario_bound",
+) -> int:
+    """按线索类型 + 日历总天数将新闻分配到叙事节奏的三段：铺垫 → 竞争 → 收束。
+
+    decoy 新闻随机散布。
+    """
+    if relevance == "decoy":
+        return max(1, rng.randint(1, max(1, calendar_days)))
+
+    D = max(1, int(calendar_days))
+    early_hi = max(1, D // 3)
+    mid_hi = max(early_hi + 1, 2 * D // 3)
+
+    early_threads = {
+        "sector_liquidity_and_inventory_financing_stress",
+        "customer_choice_shift_and_bundle_comparison_noise",
+        "perishable_supply_and_cold_chain_squeeze",
+    }
+    late_threads = {
+        "late_entrant_undercut_and_anchor_customer_poaching",
+        "evaluation_committee_split_and_procurement_delay",
+        "informal_financing_spreads_and_contingent_drawdown_clauses",
+        "stall_rules_enforcement_and_selective_inspection_calendar",
+        "multi_week_working_capital_rollover_and_supplier_credit_tightening",
+    }
+
+    if thread_id in early_threads:
+        return max(1, rng.randint(1, early_hi))
+    if thread_id in late_threads:
+        return max(early_hi + 1, rng.randint(mid_hi, D))
+    # 其余竞争压力类线索放在中段
+    return rng.randint(early_hi + 1, mid_hi)
+
+
 def _brief_for_thread(
     *,
     codename: str,
@@ -226,6 +391,7 @@ def _brief_for_thread(
     lineup: str,
     roles: tuple[str, ...],
     rng: random.Random,
+    calendar_days: int = 8,
 ) -> dict[str, Any]:
     """单条新闻：多句、含冲突解读与角色影响，便于 agent 推理。"""
     base_signal = float(rule.get("news_signal", 0.0) or 0.0)
@@ -379,6 +545,9 @@ def _brief_for_thread(
         "signal_hint": round(signal_hint, 4),
         "correlation_level": correlation_level,
         "scenario_relevance": "scenario_bound",
+        "delivery_day": _news_delivery_day(
+            thread_id, calendar_days, rng=rng, relevance="scenario_bound"
+        ),
         "scenario_binding": {
             "codename": codename,
             "scene_type": scene_type,
@@ -408,6 +577,7 @@ def _decoy_news_briefs(
     roles: tuple[str, ...],
     rng: random.Random,
     count: int,
+    calendar_days: int = 8,
 ) -> list[dict[str, Any]]:
     """若干条 **刻意弱绑定** 的干扰新闻：正文像真新闻，但与本场 ``codename`` 交易/场景无可靠因果链。"""
     base_signal = float(rule.get("news_signal", 0.0) or 0.0)
@@ -490,6 +660,9 @@ def _decoy_news_briefs(
                 "signal_hint": round(signal_hint, 4),
                 "correlation_level": corr,
                 "scenario_relevance": "decoy",
+                "delivery_day": _news_delivery_day(
+                    thread_id, calendar_days, rng=rng, relevance="decoy"
+                ),
                 "scenario_binding": {
                     "codename": codename,
                     "scene_type": "decoy_unlinked",
@@ -548,6 +721,7 @@ def _build_news_briefs_from_rule(
                 lineup=lineup,
                 roles=roles,
                 rng=rng,
+                calendar_days=int(calendar_days or 8),
             )
         )
     decoy_rng = random.Random(seed ^ 0xDEC0DE71)
@@ -557,6 +731,7 @@ def _build_news_briefs_from_rule(
         rule=rule,
         roles=roles,
         rng=random.Random(seed ^ 0xBADF00D),
+        calendar_days=int(calendar_days or 8),
         count=n_decoys,
     )
     combined = list(out) + decoys
@@ -565,10 +740,33 @@ def _build_news_briefs_from_rule(
     return combined
 
 
-def _infer_environment_context(*, codename: str, scenario_text: str) -> dict[str, Any]:
+def _infer_environment_context(
+    *, codename: str, scenario_text: str, scene_type_hint: str | None = None
+) -> dict[str, Any]:
     txt = (scenario_text or "").lower()
-    if "outsourc" in txt or "labor" in txt or "workforce" in txt:
+    scene_hint = str(scene_type_hint or "").strip().lower()
+    if scene_hint in {
+        "business_coopetition",
+        "wet_market_competition",
+        "resource_scheduling_management",
+        "business_outsourcing",
+        "competitive_bidding",
+    }:
+        scene_type = scene_hint
+    elif "scene_type=business_coopetition" in txt or "coopetition" in txt:
+        scene_type = "business_coopetition"
+    elif "scene_type=resource_scheduling_management" in txt or (
+        "resource" in txt and ("scheduling" in txt or "capacity" in txt)
+    ):
+        scene_type = "resource_scheduling_management"
+    elif "outsourc" in txt or "labor" in txt or "workforce" in txt:
         scene_type = "business_outsourcing"
+    elif "bid" in txt or "auction" in txt or "tender" in txt:
+        scene_type = "competitive_bidding"
+    else:
+        scene_type = "wet_market_competition"
+
+    if scene_type in {"business_coopetition", "business_outsourcing"}:
         base = {
             "foot_traffic": 0.45,
             "competitor_quality_signal": 0.62,
@@ -582,23 +780,21 @@ def _infer_environment_context(*, codename: str, scenario_text: str) -> dict[str
             "available skilled labor this slot",
             "competitor delivery SLA reliability",
         ]
-    elif "bid" in txt or "auction" in txt or "tender" in txt:
-        scene_type = "competitive_bidding"
+    elif scene_type in {"resource_scheduling_management", "competitive_bidding"}:
         base = {
-            "foot_traffic": 0.58,
-            "competitor_quality_signal": 0.70,
-            "hawker_noise_level": 0.32,
-            "labor_supply_tightness": 0.48,
-            "skill_complementarity_index": 0.60,
-            "bid_spread_index": 0.78,
+            "foot_traffic": 0.52,
+            "competitor_quality_signal": 0.64,
+            "hawker_noise_level": 0.28,
+            "labor_supply_tightness": 0.73,
+            "skill_complementarity_index": 0.71,
+            "bid_spread_index": 0.65,
         }
         cues = [
-            "current best bid reference",
-            "buyer reserve price pressure",
-            "rival undercut probability",
+            "resource slot contention heatmap",
+            "delivery window overrun risk",
+            "cross-team dependency bottleneck",
         ]
     else:
-        scene_type = "wet_market_competition"
         base = {
             "foot_traffic": 0.84,
             "competitor_quality_signal": 0.66,
@@ -714,6 +910,7 @@ def build_negotiation_game_metadata_bundle(
     design_doc: str = "social_env/design_1.md",
     scenario_text: str = "",
     outcome_rule_entropy: str | None = None,
+    scene_type_hint: str | None = None,
 ) -> dict[str, Any]:
     """构造与手写生成脚本一致的 ``game_metadata`` 谈判块（可合并进 LLM 生成的 profile）。
 
@@ -738,14 +935,17 @@ def build_negotiation_game_metadata_bundle(
     strict = (
         lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and quartet and n == 4
     )
+    env_ctx = _infer_environment_context(
+        codename=codename, scenario_text=scenario_text, scene_type_hint=scene_type_hint
+    )
     predefined_rule = _build_predefined_outcome_rule(
         codename=codename,
         lineup=lineup,
         num_participants=n,
         scenario_text=scenario_text,
         outcome_rule_entropy=outcome_rule_entropy,
+        scene_type=str(env_ctx.get("scene_type") or ""),
     )
-    env_ctx = _infer_environment_context(codename=codename, scenario_text=scenario_text)
     predefined_news_briefs = _build_news_briefs_from_rule(
         codename=codename,
         rule=predefined_rule,
@@ -786,6 +986,11 @@ def build_negotiation_game_metadata_bundle(
         "predefined_news_briefs": predefined_news_briefs,
         "deal_closure_pressure": deal_closure_pressure,
         "environment_context": env_ctx,
+        "dialogue_style": {
+            "version": 1,
+            "synthesis_requirements_en": DIALOGUE_STYLE_SYNTHESIS_APPEND_EN,
+            "evaluation_requirements_en": DIALOGUE_STYLE_EVAL_RUBRIC_EN,
+        },
         # 供评测与 agent 侧读入：完整场景叙事 + 社会性主题标签（不改变 timeline 解析）。
         "scenario_text": scenario_text,
         "scenario_framing": {
@@ -926,6 +1131,8 @@ def environment_pks_from_manifest(path: Path) -> list[str]:
 
 
 __all__ = [
+    "DIALOGUE_STYLE_EVAL_RUBRIC_EN",
+    "DIALOGUE_STYLE_SYNTHESIS_APPEND_EN",
     "NegotiationStoredScenario",
     "build_negotiation_game_metadata_bundle",
     "environment_pks_from_manifest",

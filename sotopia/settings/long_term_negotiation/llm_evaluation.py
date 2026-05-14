@@ -37,7 +37,8 @@
    - ``EpisodeLLMEvaluator.__acall__``（``sotopia.envs.evaluators``）— 用 ``model_dict['env']`` 做终局主观评分；
    - ``unweighted_aggregate_evaluate`` — 聚合成 ``ScriptEnvironmentResponse``。
 
-返回 **``LongTermNegotiationEvalResult``**（terminal 字符串 + rule_metrics + 可选 llm_aggregate）。
+返回 **``LongTermNegotiationEvalResult``**（terminal 字符串 + rule_metrics + 可选 llm_aggregate +
+``rule_evaluation_state``：规则指标计算所依据的终局状态快照）。
 
 同步封装：**``evaluate_long_term_negotiation_llm_sync``** — 单测或脚本里 ``asyncio.run`` 一行调用。
 
@@ -49,7 +50,7 @@ from __future__ import annotations
 import asyncio
 import json
 from contextvars import Token
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -72,9 +73,13 @@ from .negotiation_run_config import (
     build_negotiation_agents_from_run_config,
     load_negotiation_run_config,
 )
-from .negotiation_metrics import compute_negotiation_rule_metrics
+from .negotiation_metrics import (
+    build_rule_evaluation_state_record,
+    compute_negotiation_rule_metrics,
+)
 from .roles import default_display_name_for_role
 from .scenario_loader import (
+    DIALOGUE_STYLE_EVAL_RUBRIC_EN,
     goal_addon_for_deal_closure_pressure,
     load_negotiation_scenario_from_environment_profile_pk,
 )
@@ -95,6 +100,7 @@ class LongTermNegotiationEvalResult:
     terminal: str
     rule_metrics: dict[str, float]
     llm_aggregate: ScriptEnvironmentResponse | None
+    rule_evaluation_state: dict[str, Any] = field(default_factory=dict)
 
 
 def default_negotiation_roster(
@@ -125,11 +131,24 @@ def default_negotiation_roster(
     return order[:2]
 
 
-def format_negotiation_episode_for_llm_eval(env: LongTermNegotiationEnv, *, max_action_log: int | None = 500) -> str:
-    """将调度与会话轨迹压成便于 ``EpisodeLLMEvaluator`` 使用的单段文本。"""
+def format_negotiation_episode_for_llm_eval(
+    env: LongTermNegotiationEnv,
+    *,
+    max_action_log: int | None = 500,
+    dialogue_eval_rubric_en: str | None = None,
+) -> str:
+    """将调度与会话轨迹压成便于 ``EpisodeLLMEvaluator`` 使用的单段文本。
+
+    ``dialogue_eval_rubric_en``：若 ``game_metadata.dialogue_style.evaluation_requirements_en`` 有自定义，
+    则传入覆盖；否则使用 ``scenario_loader.DIALOGUE_STYLE_EVAL_RUBRIC_EN``，把对话风格要求并入终局评测上下文。
+    """
+    rubric = (dialogue_eval_rubric_en or "").strip() or DIALOGUE_STYLE_EVAL_RUBRIC_EN
     ctrl = env.ctrl
     dnames: dict[str, str] = getattr(env, "agent_display_names", {}) or {}
     lines: list[str] = []
+    lines.append("# Dialogue-style rubric (apply together with SotopiaDimensions)")
+    lines.append(rubric)
+    lines.append("")
     lines.append("# Scheduling")
     for day, slot, agent, nl in ctrl.scheduling_log:
         label = dnames.get(agent, agent)
@@ -358,6 +377,7 @@ async def run_llm_negotiation_episode_evaluation(
     execution_trace_dir: Path | str | None = None,
     execution_trace_tag: str | None = None,
     negotiation_run_config: dict[str, Any] | None = None,
+    write_execution_record: bool = False,
 ) -> LongTermNegotiationEvalResult:
     """跑通一期 **全流程 LLM 参与者** negotiation，并可选用 ``EpisodeLLMEvaluator`` 做终局主观评分。
 
@@ -376,34 +396,29 @@ async def run_llm_negotiation_episode_evaluation(
     ``negotiation_run_config``：可选，与 ``negotiation-batch --run-config`` 相同语义的 dict，
     用于选择记忆后端（plain / summarizing）等；默认 plain。
 
-    ``model_trace_dir`` 非空时：在本 episode 期间激活 ``model_trace`` 上下文，将每次 ``agenerate``
-    的原始 completion 与解析结果按 **agent** 分文件追加写入
-    ``{model_trace_dir}/{stem}_{<agent>}.jsonl``（``stem`` 来自 ``model_trace.safe_trace_filename`` 去掉
-    后缀）；无 ``agent`` 元数据时写入 ``{stem}_no_agent.jsonl``；终局评测写入
-    ``{stem}_terminal_eval.jsonl``。各行含全局单调 ``step_index``。
+    **JSONL 轨迹（默认唯一落盘的模型 I/O 档案）**：当 ``model_trace_dir`` 或 ``execution_trace_dir``
+    任一非空时，在本 episode 激活 ``model_trace``；实际写入目录为 ``model_trace_dir``（若未传则回退为
+    ``execution_trace_dir``，便于旧 CLI 只传 ``--execution-trace-dir``）。每次 ``agenerate`` 等路径将
+    完整 ``messages`` / ``full_rendered_prompt`` / ``input_values`` / ``raw_model_content`` / ``parsed``
+    等按 ``input_values["agent"]`` 追加到 ``{dir}/{stem}_{<名字>}.jsonl``；无 ``agent`` 时写入
+    ``{stem}_no_agent.jsonl``。终局 ``EpisodeLLMEvaluator`` 走同一 ``agenerate`` 路径，使用固定
+    ``agent="terminal_evaluator"`` 写入 ``{stem}_terminal_evaluator.jsonl``（与其它角色文件同形）。
 
-    ``execution_trace_dir`` 非空时：在 episode 跑完后将 **全局执行档案**（时间线、合同 history、
-    完整 ``messenger_inbox``、``action_log`` / ``session_log`` 等）写入
-    ``{execution_trace_dir}/{execution_trace_tag}.execution.json``（见
-    ``episode_execution_record.safe_execution_trace_filename``），并默认 **同目录** 再写一份
-    ``*.execution.transcript.txt``（``format_episode_interaction_transcript``：纯文本、按节展开
-    全量交互，便于直接打开阅读）。另默认写入 **每角色合一** 的
-    ``{execution_trace_tag}_{<agent>}.agent_episode.json``：该 agent 的执行轨迹子集与同角色的
-    全部 LLM 原始输入输出（与 ``model_trace`` 行字段一致）在同一 JSON 内。若同场已开启 ``model_trace_dir``，
-    全局 JSON / transcript / 各 ``*.agent_episode.json`` 会 **合并** 各次 LLM 调用的完整 ``input_values``、
-    渲染后 user prompt、首次 API 原始正文及（若有）坏输出修复链原文（字段 ``llm_model_traces``、transcript §8）。
+    ``write_execution_record=True`` 且 ``execution_trace_dir`` 非空时（**可选、默认关闭**）：episode
+    结束后额外写入 ``*.execution.json``、``*.execution.transcript.txt`` 与各 ``*.agent_episode.json``，
+    并从上述 JSONL 合并 ``llm_model_traces``（见 ``episode_execution_record.write_episode_execution_record``）。
     """
     if "env" not in model_dict:
         raise KeyError("model_dict must contain key 'env' for the evaluator / scoring model.")
 
     trace_token: Token | None = None
     trace_stem: str | None = None
-    if model_trace_dir is not None:
+    _jsonl_dir = model_trace_dir if model_trace_dir is not None else execution_trace_dir
+    _jsonl_tag = model_trace_tag or execution_trace_tag or "negotiation_episode"
+    if _jsonl_dir is not None:
         from .model_trace import begin_episode_trace, safe_trace_filename
 
-        trace_path = Path(model_trace_dir).resolve() / safe_trace_filename(
-            model_trace_tag or "negotiation_episode"
-        )
+        trace_path = Path(_jsonl_dir).resolve() / safe_trace_filename(_jsonl_tag)
         trace_stem = trace_path.stem
         trace_token = begin_episode_trace(trace_path)
 
@@ -427,8 +442,8 @@ async def run_llm_negotiation_episode_evaluation(
         params_run = params or NegotiationTimelineParams(
             D=8,
             s_max_per_day=2,
-            max_session_rounds=40,
-            max_total_turns_per_session=80,
+            max_session_rounds=12,
+            max_total_turns_per_session=32,
         )
 
     if num_participants is not None:
@@ -484,8 +499,11 @@ async def run_llm_negotiation_episode_evaluation(
 
         terminal = await env.run_episode_async(max_macro_steps=max_macro_steps)
         rule_metrics = compute_negotiation_rule_metrics(env, predefined_outcome_rule=predefined_rule)
+        rule_eval_state = build_rule_evaluation_state_record(
+            env, predefined_outcome_rule=predefined_rule
+        )
 
-        if execution_trace_dir is not None:
+        if write_execution_record and execution_trace_dir is not None:
             from .episode_execution_record import (
                 safe_execution_trace_filename,
                 write_episode_execution_record,
@@ -497,34 +515,40 @@ async def run_llm_negotiation_episode_evaluation(
             write_episode_execution_record(
                 env,
                 ex_path,
-                model_trace_dir=Path(model_trace_dir).resolve() if model_trace_dir else None,
+                model_trace_dir=Path(_jsonl_dir).resolve() if trace_stem and _jsonl_dir else None,
                 model_trace_stem=trace_stem,
             )
 
         llm_agg: ScriptEnvironmentResponse | None = None
         if run_terminal_llm_eval:
+            ds_block: str | None = None
+            raw_ds = gm.get("dialogue_style") if isinstance(gm.get("dialogue_style"), dict) else None
+            if isinstance(raw_ds, dict):
+                ev = raw_ds.get("evaluation_requirements_en")
+                if isinstance(ev, str) and ev.strip():
+                    ds_block = ev.strip()
             history = format_negotiation_episode_for_llm_eval(
-                env, max_action_log=history_max_action_log
+                env,
+                max_action_log=history_max_action_log,
+                dialogue_eval_rubric_en=ds_block,
             )
             evaluator = EpisodeLLMEvaluator(
                 model_name=model_dict["env"],
                 response_format_class=EvaluationForAgents[evaluation_dimension_model],  # type: ignore[valid-type]
             )
-            raw = await evaluator.__acall__(turn_number=-1, history=history, messages=None)
+            raw = await evaluator.__acall__(
+                turn_number=-1,
+                history=history,
+                messages=None,
+                num_agents_override=len(roster),
+            )
             llm_agg = unweighted_aggregate_evaluate(list(raw))
-            if trace_token is not None:
-                from .model_trace import record_terminal_eval_step
-
-                record_terminal_eval_step(
-                    model_name=model_dict["env"],
-                    history=history,
-                    aggregate=llm_agg,
-                )
 
         return LongTermNegotiationEvalResult(
             terminal=terminal,
             rule_metrics=rule_metrics,
             llm_aggregate=llm_agg,
+            rule_evaluation_state=rule_eval_state,
         )
     finally:
         if trace_token is not None:

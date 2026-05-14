@@ -68,6 +68,7 @@ class LongTermNegotiationEnv(MessengerMixin):
         model_name: str = "gpt-4o-mini",
         predefined_outcome_rule: dict[str, Any] | None = None,
         agent_display_names: Mapping[str, str] | None = None,
+        predefined_news_briefs: list[dict[str, Any]] | None = None,
     ) -> None:
         MessengerMixin.__init__(self)
         names = tuple(sorted(agents.keys()))
@@ -142,6 +143,8 @@ class LongTermNegotiationEnv(MessengerMixin):
         self.predefined_outcome_rule: dict[str, Any] = (
             dict(predefined_outcome_rule) if isinstance(predefined_outcome_rule, dict) else {}
         )
+        self.predefined_news_briefs: list[dict[str, Any]] = list(predefined_news_briefs or [])
+        self._news_delivered: set[int] = set()  # track which news indices have been shown
         self._contract_status_settlement_applied: bool = False
 
         for _role, _ag in self.agents.items():
@@ -229,6 +232,42 @@ class LongTermNegotiationEnv(MessengerMixin):
             out = re.sub(r"\b" + re.escape(cid) + r":", disp + ":", out)
         return out
 
+    def _format_active_news(self, viewer: str) -> str:
+        """按合成阶段确定的 ``delivery_day`` 精确投放新闻。"""
+        if not self.predefined_news_briefs:
+            return ""
+        day = int(getattr(self.ctrl, "day", 1) or 1)
+
+        # 筛选当天应投放的新闻（delivery_day 与当前 day 匹配）
+        today_news: list[dict[str, Any]] = []
+        for brief in self.predefined_news_briefs:
+            dd = brief.get("delivery_day")
+            if isinstance(dd, (int, float)) and int(dd) == day:
+                today_news.append(brief)
+
+        if not today_news:
+            return ""
+
+        lines: list[str] = [
+            "[market_intelligence — news visible to all participants this day]",
+            "These bulletins reflect market conditions that may affect your negotiation. "
+            "Use them as signals for pricing, timing, and counterparty risk assessment. "
+            "Do NOT treat signal_hint values as contract terms.",
+        ]
+        for ni, brief in enumerate(today_news):
+            tid = brief.get("thread_id", f"news_{ni}")
+            title = brief.get("title", tid)
+            summary = brief.get("summary", "")
+            signal = brief.get("signal_hint")
+            corr = brief.get("correlation_level", "unknown")
+            relevance = brief.get("scenario_relevance", "scenario_bound")
+            rel_tag = "" if relevance == "scenario_bound" else " [LOW_RELEVANCE_NOISE]"
+            lines.append(f"--- {title}{rel_tag} ---")
+            lines.append(summary)
+            if signal is not None:
+                lines.append(f"(signal_hint={signal:.3f} correlation={corr})")
+        return "\n".join(lines)
+
     def _digest(self, viewer: str) -> str:
         # 类比 ``SocialSystemEnv._before_return_astep``：在环境文本中附上 system_state 摘要。
         base = self._rewrite_digest_line_display_names(self.system_state.digest_line(viewer=viewer))
@@ -237,11 +276,14 @@ class LongTermNegotiationEnv(MessengerMixin):
             self._psych_by_agent.get(viewer),
             expose_threshold=self.params.expose_psych_threshold_in_observation,
         )
+        news = self._format_active_news(viewer)
         parts = [base]
         if psych.strip():
             parts.append(psych.rstrip())
         if extra.strip():
             parts.append(extra)
+        if news.strip():
+            parts.append(news.rstrip())
         return "\n".join(parts)
 
     async def _run_terminal_evaluators_like_parallel_astep(self) -> ScriptEnvironmentResponse | None:

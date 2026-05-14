@@ -117,6 +117,7 @@ contract = {
   - `social`：total_welfare / gini / stability
   - `behavioral`：cooperation / punishment / deception / reciprocity
   - `long_horizon`：历史利用、策略调整、长期目标一致性
+- **对话风格（长期谈判已实现）**：`EnvironmentProfile.game_metadata.dialogue_style` 固化「造数 + 终局 LLM 评测」的英文要求；终局评测在 `format_negotiation_episode_for_llm_eval` 中把 rubric 置于轨迹文本首部，使 `EpisodeLLMEvaluator` 在 believability / knowledge / goal 等维度上显式考察角色声线是否可区分、是否与场景叙事一致（详见 `sotopia/settings/README.zh.md` 对话风格小节）。
 
 ---
 
@@ -266,6 +267,76 @@ events:
 - 关键动作：`transfer_resource(consume)`, `vote`, `propose_contract(quota)`
 - 关键事件：干旱、政策限额、技术突破
 - 指标：sustainability、fairness、cooperation、stability
+
+### 场景3规则计算（资源协商调度专用）
+
+目标：在每轮对话后，把多方资源请求映射为可计算分配结果，不依赖 LLM 主观打分。
+
+#### Stage 1：Demand Scoring（需求强度）
+
+- 基础需求：`base_demand_{i,k}`
+- 人格/紧急度放大：`D_{i,k} = base_demand_{i,k} * (1 + α*urgency_i + β*aggressiveness_i)`
+- 社会修正：`effective_demand_{i,k} = D_{i,k} * (1 + trust_bonus_i)`
+
+其中 `urgency_i` 来自现金、库存、履约压力等状态，支持被对话信息更新（例如短缺传闻 -> 紧急度上调）。
+
+#### Stage 2：Priority Computation（优先级）
+
+- 基础优先级：`P_{i,k} = D_{i,k} * (1 + cooperation_i) * (1 + reputation_i)`
+- 网络修正：`P'_{i,k} = P_{i,k} + Σ_j trust(j,i)*influence_j - overlap_penalty_{i,k}`
+- 人格惩罚/奖励：
+  - 高 aggressiveness：短期争抢优先级可上升
+  - 高 long_term_orientation：稳定优先级可上升
+  - 低 honesty：违约风险/信誉惩罚提高
+
+#### Stage 3：Allocation（资源分配）
+
+- 推荐 Softmax：
+  - `allocation_{i,k} = r_k * exp(P'_{i,k}) / Σ_j exp(P'_{j,k})`
+- 或约束优化：
+  - `maximize Σ_i P'_{i,k} * allocation_{i,k}`
+  - `subject to Σ_i allocation_{i,k} ≤ r_k, allocation_{i,k} ≥ 0`
+- 分层优先（业务兜底）：
+  1) 生存资源（现金/基础供给）
+  2) 合同履约资源
+  3) 声誉加权请求
+  4) 市场机会型请求
+
+#### 对话驱动链路（必须）
+
+`dialogue -> belief_update -> urgency_shift -> demand/priority_shift -> allocation`
+
+并在每轮结束后更新：
+
+- `cash_i / inventory_i`
+- `trust(i,j)`
+- `reputation_i`
+- 冲突不足时触发再协商（让步、价格调整、未来承诺交换）
+
+### 三类场景的规则计算写入（统一公式 + 场景参数化）
+
+为保证可复现与可横向比较，评分不采用三套互斥公式，而采用：
+
+1. **统一终局评分公式**（所有场景共用）
+
+`final_state_score = 0.3*terminal_success + 0.2*primary_contract_factor + 0.15*solvency_ratio + 0.1*liquidity_preserved + 0.25*predefined_rule_score`
+
+其中 `primary_contract_factor` 由合同状态映射（`proposed/amended/accepted/signed/...`），`predefined_rule_score` 来自规则引擎的利润率归一化结果。
+
+2. **场景差异通过参数注入**
+
+- 商业合作竞争（`business_coopetition`）：提高“多方协同与竞合”相关线索，侧重合同达成质量与可执行条款。
+- 个体交易竞争（`wet_market_competition`）：强化“信用/熟人关系/现金流”线索，侧重流动性与偿付能力。
+- 资源调度管理（`resource_scheduling_management`）：强化“容量/排班/时窗冲突”线索，侧重调度可行性与违约风险控制。
+
+3. **规则明细计算（各场景共用口径）**
+
+- `realized_margin = clip(base_margin + news_weight*news_signal + execution_weight*execution_signal, lo, hi)`
+- `total_profit = contract_value_if_signed * realized_margin * contract_effective`
+- `company_profit_{role}` 按 `company_profit_share` 分配
+- `individual_profit_{role}` 再乘 `individual_income_share`
+
+> 结论：场景不同，主要改变“上下文参数与线索分布”；结算与评分公式保持一致，保证 benchmark 的跨场景可比性。
 
 ---
 

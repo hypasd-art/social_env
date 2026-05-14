@@ -1,16 +1,14 @@
-"""单条谈判 episode 的 **全局执行档案**：时间线 + 合同历史 + 审计日志，便于复盘「何时签约」等。
+"""单条谈判 episode 的 **可选全局执行档案**（时间线、合同、完整 inbox 等）。
 
-由 ``run_llm_negotiation_episode_evaluation`` 在 ``execution_trace_dir`` 非空时
-在 episode 结束后写入 ``{dir}/{tag}.execution.json``，并在默认开启时 **额外** 写入同 stem 的
-``{dir}/{tag}.execution.transcript.txt``：按时间顺序整理 **完整** ``LongTermNegotiationEnv.inbox``
-（环境侧累积的全部 Environment / 各 agent 行动）及调度、会话、可见历史等；若同时开启
-``model_trace_dir`` 且传入与 trace 一致的 stem，则合并 **逐次 LLM 调用的完整输入与原始输出**
-（``llm_model_traces`` / transcript §8）。
+默认评测链路 **只** 通过 ``model_trace`` 写入 ``{stem}_<名字>.jsonl`` 保存各次 LLM 的完整输入输出；
+本模块在 ``run_llm_negotiation_episode_evaluation(..., write_execution_record=True)`` 且
+``execution_trace_dir`` 非空时才会落盘：
 
-另：默认再为 **每个参与者** 写入 ``{tag}_{<agent>}.agent_episode.json``，将 **该 agent 视角下的
-执行轨迹子集**（Environment 广播、本人发出条、可见历史、本人 action/message/调度行）与
-**该 agent 的全部 LLM 调用记录**（与 ``model_trace`` 中同字段一致的全量输入输出）合并到 **同一文件**，
-便于按角色单文件复盘。
+* ``{dir}/{tag}.execution.json`` — 结构化全量档案；若提供与 JSONL 一致的 ``model_trace_dir``/stem，
+  会合并 ``llm_model_traces``；
+* 同 stem 的 ``*.execution.transcript.txt`` — 人类可读复盘稿（含可选 §8 LLM 轨迹）；
+* 各 ``{tag}_{<agent>}.agent_episode.json`` — 按角色的 inbox 子集 + 日志子集 + 该角色 LLM 行（默认开启，
+  见 ``write_episode_execution_record`` 参数）。
 """
 
 from __future__ import annotations
@@ -118,8 +116,14 @@ def build_per_agent_episode_bundle(
 
     llm_for: list[dict[str, Any]] = []
     if llm_model_traces:
+        trace_labels: set[str] = {agent}
+        dmap = getattr(env, "agent_display_names", None) or {}
+        if isinstance(dmap, dict):
+            dn = dmap.get(agent)
+            if dn and str(dn).strip():
+                trace_labels.add(str(dn).strip())
         for row in llm_model_traces:
-            if str(row.get("trace_agent") or "") == agent:
+            if str(row.get("trace_agent") or "") in trace_labels:
                 llm_for.append(dict(row))
         llm_for.sort(key=lambda r: int(r.get("step_index", 0) or 0))
 

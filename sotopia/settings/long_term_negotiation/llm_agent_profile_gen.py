@@ -128,6 +128,8 @@ Constraints (MUST follow):
 - **Conversational differentiation:** In ``public_info`` and especially ``personality_and_values``, specify a **distinct**
   spoken style (default register, pacing, typical openers/fillers, what they avoid) that would sound **different**
   from another negotiator in the same market episode—without copying the archetype label verbatim as a name.
+- **Benchmark alignment:** The downstream simulator injects ``[dialogue_voice]`` / DialogueVoice into private goals;
+  keep ``decision_making_style`` and ``personality_and_values`` consistent with that voice so multi-day transcripts stay distinguishable.
 - No sensitive personal data, no real public figures.
 
 Output ONLY a JSON OBJECT WITH FILLED-IN VALUES (do NOT echo a JSON schema, do NOT include

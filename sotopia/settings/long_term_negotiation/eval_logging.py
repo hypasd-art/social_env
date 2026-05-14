@@ -2,18 +2,17 @@
 
 **输出到哪里去**
 
-1. **结构化结果**：``negotiation-batch -o xxx.jsonl`` —— 每行一条 episode 的机器可读记录；不是传统 log。
+1. **结构化结果**：``negotiation-batch -o`` —— 一次 run 一个带时间戳的 JSON（``aggregate_means`` + ``rows``）；不是传统 log。
 2. **进度条**：``tqdm`` 写到 stderr（``run_long_term_negotiation_eval_batch_async``）。
 3. **控制台 / 文件日志**：logger ``sotopia.negotiation`` 及以下子 logger；CLI ``--print-logs`` 用 Rich，
    ``--log-file`` 追加 **纯文本** UTF-8（无 ANSI）。
-4. **模型 trace**（``--model-trace-dir`` 或 ``--artifact-root``）：每场 episode 下按 agent 多份 ``*.jsonl`` + 一份终局
-   ``*_terminal_eval.jsonl``，见 ``model_trace`` 模块说明。批量 CLI 默认写入
-   ``{根目录}/{测试模型名}/{时间戳}/``（``--trace-flat`` 可关闭嵌套）。
-5. **执行档案**（``--execution-trace-dir`` 或 ``--artifact-root``）：每场 ``*.execution.json`` + 同 stem 的 ``*.execution.transcript.txt``
-   （全量交互纯文本），以及默认 **每角色一份** ``{tag}_{agent}.agent_episode.json``（该角色执行轨迹子集 + 其全部 LLM 输入输出合一），见 ``episode_execution_record``。批量时默认与 trace 相同的
-   ``{根目录}/{测试模型名}/{时间戳}/`` 嵌套。
-6. **统一根目录**（``negotiation-batch --artifact-root``）：将 execution、model trace、默认
-   ``negotiation_batch.log`` 的根目录设为同一路径；**单模型**时三者落在同一叶子文件夹。
+4. **模型 I/O trace**（``--model-trace-dir``、``--execution-trace-dir`` 或 ``--artifact-root``）：每场 episode 下
+   仅 ``{tag}_<名字>.jsonl``（参与者 + ``terminal_evaluator`` + 可选 ``no_agent``），见 ``model_trace``。
+   仅传 ``--execution-trace-dir`` 时与 ``model_trace_dir`` 未传等价，JSONL 仍写入该目录。
+   批量 CLI 默认嵌套 ``{根目录}/{测试模型名}/{时间戳}/``（``--trace-flat`` 可关闭）。
+5. **可选执行档案**：仅当程序化调用 ``run_llm_negotiation_episode_evaluation(..., write_execution_record=True)``
+   且 ``execution_trace_dir`` 非空时，才写 ``*.execution.json`` / ``*.transcript.txt`` / ``*.agent_episode.json``（见 ``episode_execution_record``）。
+6. **统一根目录**（``negotiation-batch --artifact-root``）：将 JSONL 与默认 ``negotiation_batch.log`` 的根目录设为同一路径；**单模型**时落在同一叶子文件夹。
 7. **第三方**：``sotopia.generation_utils.generate`` / LiteLLM / litellm 等在 DEBUG/INFO 时可能额外刷屏；
    需要时可 ``export LITELLM_LOG=WARNING``（视版本而定）。
 """

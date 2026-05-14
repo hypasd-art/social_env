@@ -24,6 +24,7 @@ _FINAL_STATE_WEIGHT_PRIMARY_CONTRACT = 0.2
 _FINAL_STATE_WEIGHT_SOLVENCY = 0.15
 _FINAL_STATE_WEIGHT_LIQUIDITY_PRESERVED = 0.1
 _FINAL_STATE_WEIGHT_PREDEFINED_RULE = 0.25
+_FINAL_STATE_WEIGHT_SCHEDULING_EFFECTIVENESS = 0.0
 
 
 def primary_contract_status_factor(status: str) -> float:
@@ -50,6 +51,142 @@ def _clip(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(v)))
 
 
+def _scene_score_weights(predefined_outcome_rule: dict[str, Any] | None) -> dict[str, float]:
+    base = {
+        "terminal_success": _FINAL_STATE_WEIGHT_TERMINAL_SUCCESS,
+        "primary_contract": _FINAL_STATE_WEIGHT_PRIMARY_CONTRACT,
+        "solvency": _FINAL_STATE_WEIGHT_SOLVENCY,
+        "liquidity_preserved": _FINAL_STATE_WEIGHT_LIQUIDITY_PRESERVED,
+        "predefined_rule": _FINAL_STATE_WEIGHT_PREDEFINED_RULE,
+        "scheduling_effectiveness": _FINAL_STATE_WEIGHT_SCHEDULING_EFFECTIVENESS,
+    }
+    if not isinstance(predefined_outcome_rule, dict):
+        return base
+    raw = predefined_outcome_rule.get("score_weights")
+    if not isinstance(raw, dict):
+        return base
+    out = dict(base)
+    for k in out:
+        v = raw.get(k)
+        if isinstance(v, (int, float)):
+            out[k] = float(v)
+    return out
+
+
+def _scheduling_effectiveness_factor(ctrl: Any) -> float:
+    logs = list(getattr(ctrl, "session_log", []) or [])
+    if not logs:
+        return 0.0
+    rows = [r for r in logs if isinstance(r, dict) and r.get("kind") == "post_session_bookkeeping"]
+    if not rows:
+        return 0.0
+    no_session = sum(
+        1
+        for r in rows
+        if str(r.get("slot_closure_reason") or "") == "scheduling_yielded_no_session"
+    )
+    return _clip(1.0 - float(no_session) / float(len(rows)), 0.0, 1.0)
+
+
+def _primary_contract_price(env: Any) -> tuple[float, Any]:
+    """主合同 ``terms.price``（与 ``NegotiationWorldController`` 校验字段一致）。"""
+    ctrl = getattr(env, "ctrl", None)
+    if ctrl is None:
+        return 0.0, None
+    pcs = getattr(ctrl, "primary_contract_id", None)
+    if not pcs:
+        return 0.0, None
+    c = getattr(ctrl, "contracts", {}).get(pcs)
+    if c is None:
+        return 0.0, None
+    terms = getattr(c, "terms", {}) or {}
+    raw = terms.get("price", 0) if isinstance(terms, dict) else 0
+    try:
+        return float(raw or 0), c
+    except (TypeError, ValueError):
+        return 0.0, c
+
+
+def _compute_procurement_savings_metrics(
+    *,
+    env: Any,
+    primary_factor: float,
+    rule: dict[str, Any],
+) -> tuple[dict[str, float], float]:
+    """个人采购/竞价口径：不按 margin 分红，按「成交价相对参考价的节省」计分与结算。"""
+    out: dict[str, float] = {}
+    out["negotiation_predefined_rule_enabled"] = 1.0
+    out["negotiation_predefined_rule_payout_mode_procurement"] = 1.0
+
+    contract_value = float(rule.get("contract_value_if_signed", 0.0) or 0.0)
+    out["negotiation_predefined_rule_contract_value"] = contract_value
+    reference = float(rule.get("reference_unit_price", rule.get("reference_price", 0.0)) or 0.0)
+    out["negotiation_predefined_rule_reference_price"] = reference
+
+    realized, _c = _primary_contract_price(env)
+    out["negotiation_predefined_rule_realized_price"] = realized
+
+    is_contract_effective = 1.0 if primary_factor >= 0.75 else 0.0
+    out["negotiation_predefined_rule_contract_effective"] = is_contract_effective
+
+    # 与 margin 路径区分：不产出 realized_margin / 公司分红中间量
+    out["negotiation_predefined_rule_realized_margin"] = 0.0
+    out["negotiation_predefined_rule_news_signal"] = float(rule.get("news_signal", 0.0) or 0.0)
+    out["negotiation_predefined_rule_total_profit"] = 0.0
+
+    full_frac = float(rule.get("full_score_savings_fraction", 0.12) or 0.12)
+    if full_frac <= 1e-9:
+        full_frac = 0.12
+
+    rule_factor = 0.0
+    savings = 0.0
+    savings_ratio = 0.0
+    if reference > 0 and is_contract_effective > 0 and realized > 0:
+        savings = reference - realized
+        savings_ratio = savings / reference
+        if savings_ratio > 0:
+            rule_factor = _clip(savings_ratio / full_frac, 0.0, 1.0) * is_contract_effective
+
+    out["negotiation_predefined_rule_buyer_savings_per_unit"] = savings * is_contract_effective
+    out["negotiation_predefined_rule_buyer_savings_ratio"] = max(0.0, savings_ratio) * is_contract_effective
+    out["negotiation_predefined_rule_score"] = rule_factor
+
+    buyers_raw = rule.get("buyer_roles")
+    buyers: list[str] = (
+        [str(x).strip() for x in buyers_raw if str(x).strip()]
+        if isinstance(buyers_raw, (list, tuple))
+        else []
+    )
+    if not buyers:
+        buyers = ["firm_a"]
+
+    sellers_raw = rule.get("seller_roles")
+    sellers: list[str] = (
+        [str(x).strip() for x in sellers_raw if str(x).strip()]
+        if isinstance(sellers_raw, (list, tuple))
+        else []
+    )
+
+    scale = float(rule.get("savings_cash_scale", 1.0) or 1.0)
+    bonus_total = float(rule.get("seller_closure_bonus_total", 0.0) or 0.0)
+
+    n_buy = max(1, len(buyers))
+
+    eff_savings = max(0.0, savings) * is_contract_effective
+    buyer_pool = eff_savings * scale
+    for role in buyers:
+        out[f"negotiation_predefined_rule_individual_profit_{role}"] = buyer_pool / float(n_buy)
+
+    if sellers and bonus_total > 0 and is_contract_effective > 0:
+        per = bonus_total / float(len(sellers))
+        for role in sellers:
+            out[f"negotiation_predefined_rule_individual_profit_{role}"] = (
+                float(out.get(f"negotiation_predefined_rule_individual_profit_{role}", 0.0)) + per
+            )
+
+    return out, rule_factor
+
+
 def _compute_predefined_rule_payout_metrics(
     *,
     env: Any,
@@ -61,7 +198,15 @@ def _compute_predefined_rule_payout_metrics(
         out["negotiation_predefined_rule_enabled"] = 0.0
         return out, 0.0
 
+    if str(predefined_outcome_rule.get("payout_mode") or "").strip() == "procurement_savings":
+        return _compute_procurement_savings_metrics(
+            env=env,
+            primary_factor=primary_factor,
+            rule=predefined_outcome_rule,
+        )
+
     out["negotiation_predefined_rule_enabled"] = 1.0
+    out["negotiation_predefined_rule_payout_mode_procurement"] = 0.0
     contract_value = float(predefined_outcome_rule.get("contract_value_if_signed", 0.0) or 0.0)
     out["negotiation_predefined_rule_contract_value"] = contract_value
     out["negotiation_predefined_rule_news_signal"] = float(
@@ -215,12 +360,16 @@ def compute_negotiation_final_state_metrics(
     liquidity_factor = (
         1.0 if out["negotiation_final_state_total_cash_delta"] >= 0.0 else 0.0
     )
+    scheduling_factor = _scheduling_effectiveness_factor(ctrl)
+    out["negotiation_scheduling_effectiveness_factor"] = scheduling_factor
+    weights = _scene_score_weights(predefined_outcome_rule)
 
     score = (
-        _FINAL_STATE_WEIGHT_TERMINAL_SUCCESS * success_factor
-        + _FINAL_STATE_WEIGHT_PRIMARY_CONTRACT * primary_factor
-        + _FINAL_STATE_WEIGHT_SOLVENCY * solvency_factor
-        + _FINAL_STATE_WEIGHT_LIQUIDITY_PRESERVED * liquidity_factor
+        weights["terminal_success"] * success_factor
+        + weights["primary_contract"] * primary_factor
+        + weights["solvency"] * solvency_factor
+        + weights["liquidity_preserved"] * liquidity_factor
+        + weights["scheduling_effectiveness"] * scheduling_factor
     )
     rule_out, rule_factor = _compute_predefined_rule_payout_metrics(
         env=env,
@@ -228,22 +377,25 @@ def compute_negotiation_final_state_metrics(
         predefined_outcome_rule=predefined_outcome_rule,
     )
     out.update(rule_out)
-    score += _FINAL_STATE_WEIGHT_PREDEFINED_RULE * rule_factor
+    score += weights["predefined_rule"] * rule_factor
     out["negotiation_final_state_score"] = float(max(0.0, min(1.0, score)))
     out["negotiation_final_state_score_component_terminal_success"] = (
-        _FINAL_STATE_WEIGHT_TERMINAL_SUCCESS * success_factor
+        weights["terminal_success"] * success_factor
     )
     out["negotiation_final_state_score_component_primary_contract"] = (
-        _FINAL_STATE_WEIGHT_PRIMARY_CONTRACT * primary_factor
+        weights["primary_contract"] * primary_factor
     )
     out["negotiation_final_state_score_component_solvency"] = (
-        _FINAL_STATE_WEIGHT_SOLVENCY * solvency_factor
+        weights["solvency"] * solvency_factor
     )
     out["negotiation_final_state_score_component_liquidity_preserved"] = (
-        _FINAL_STATE_WEIGHT_LIQUIDITY_PRESERVED * liquidity_factor
+        weights["liquidity_preserved"] * liquidity_factor
     )
     out["negotiation_final_state_score_component_predefined_rule"] = (
-        _FINAL_STATE_WEIGHT_PREDEFINED_RULE * rule_factor
+        weights["predefined_rule"] * rule_factor
+    )
+    out["negotiation_final_state_score_component_scheduling_effectiveness"] = (
+        weights["scheduling_effectiveness"] * scheduling_factor
     )
     return out
 
@@ -296,7 +448,85 @@ def compute_negotiation_rule_metrics(
     return out
 
 
+def _negotiation_contract_to_jsonable(c: Any, *, history_tail_max: int) -> dict[str, Any]:
+    """将 ``NegotiationContract`` 压成可 JSON 序列化的 dict（合同 history 仅保留尾部）。"""
+    parties = getattr(c, "parties", None) or set()
+    visibility = getattr(c, "visibility", None) or set()
+    hist = list(getattr(c, "history", []) or [])
+    if history_tail_max > 0 and len(hist) > history_tail_max:
+        hist = hist[-history_tail_max:]
+    acc = getattr(c, "acceptances", None) or {}
+    sig = getattr(c, "signatures", None) or {}
+    return {
+        "contract_id": str(getattr(c, "contract_id", "") or ""),
+        "parent_id": getattr(c, "parent_id", None),
+        "status": str(getattr(c, "status", "") or ""),
+        "terms": dict(getattr(c, "terms", {}) or {}),
+        "created_by": str(getattr(c, "created_by", "") or ""),
+        "created_at": dict(getattr(c, "created_at", {}) or {}),
+        "parties": sorted(str(p) for p in parties),
+        "acceptances": {str(k): v for k, v in dict(acc).items()},
+        "visibility": sorted(str(v) for v in visibility),
+        "signatures": {str(k): bool(v) for k, v in dict(sig).items()},
+        "financing": dict(getattr(c, "financing", {}) or {}),
+        "regulatory": dict(getattr(c, "regulatory", {}) or {}),
+        "history_tail": list(hist),
+        "created_day": int(getattr(c, "created_day", 0) or 0),
+        "created_slot": int(getattr(c, "created_slot", 0) or 0),
+    }
+
+
+def build_rule_evaluation_state_record(
+    env: Any,
+    *,
+    predefined_outcome_rule: dict[str, Any] | None = None,
+    contract_history_tail_max: int = 40,
+) -> dict[str, Any]:
+    """采集与 ``compute_negotiation_rule_metrics`` 口径对齐的**终局状态**快照，便于评测落盘复现。
+
+    - ``state_snapshot_for_rule_metrics``：与 ``compute_negotiation_final_state_metrics`` 相同，
+      取 ``ctrl.state_snapshots`` 的**最后一条**（episode 末尾 ``after_terminal`` 写入）。
+    - ``system_state_agent_resources_end``：``env.system_state.agent_resources`` 终值（与部分
+      ``negotiation_participant_*`` 指标同源）。
+    - ``contracts``：当前控制器合同账本摘要（history 截断）。
+    - ``predefined_outcome_rule_used``：若调用方传入非空 dict，则回显本次规则计算所用参数。
+    """
+    ctrl = getattr(env, "ctrl", None)
+    if ctrl is None:
+        return {"error": "missing_controller"}
+
+    snap = _final_intermediate_snapshot(ctrl)
+    snap_out: dict[str, Any] | None = dict(snap) if snap else None
+
+    st = getattr(env, "system_state", None)
+    system_resources: dict[str, Any] | None = None
+    if st is not None:
+        keys = list(getattr(st, "agent_keys", []) or [])
+        ar = getattr(st, "agent_resources", {}) or {}
+        system_resources = {str(k): dict(ar.get(k, {}) or {}) for k in keys}
+
+    contracts_raw = getattr(ctrl, "contracts", {}) or {}
+    contracts_out: dict[str, Any] = {}
+    for cid, c in contracts_raw.items():
+        contracts_out[str(cid)] = _negotiation_contract_to_jsonable(
+            c, history_tail_max=contract_history_tail_max
+        )
+
+    out: dict[str, Any] = {
+        "state_snapshot_for_rule_metrics": snap_out,
+        "n_state_snapshots": len(list(getattr(ctrl, "state_snapshots", []) or [])),
+        "system_state_agent_resources_end": system_resources,
+        "primary_contract_id": getattr(ctrl, "primary_contract_id", None),
+        "contracts": contracts_out,
+        "controller_terminal": str(getattr(ctrl, "terminal", "") or ""),
+    }
+    if isinstance(predefined_outcome_rule, dict):
+        out["predefined_outcome_rule_used"] = dict(predefined_outcome_rule)
+    return out
+
+
 __all__ = [
+    "build_rule_evaluation_state_record",
     "compute_predefined_rule_settlement_by_contract_status",
     "compute_negotiation_final_state_metrics",
     "compute_negotiation_rule_metrics",

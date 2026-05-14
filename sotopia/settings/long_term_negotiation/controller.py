@@ -516,7 +516,7 @@ class NegotiationWorldController:
         blocks: list[str] = []
         ext_blk = self.drain_external_event_observations(viewer)
         if ext_blk.strip():
-            blocks.append("[external_events §8]\n" + ext_blk)
+            blocks.append("[external_events]\n" + ext_blk)
         hist = self.visible_history.get(viewer, [])
         if hist:
             tail = hist[-history_tail_lines:]
@@ -566,9 +566,9 @@ class NegotiationWorldController:
             "Submit ONE session request using action_type='action' and JSON in argument, for example:\n"
             f"{ex_req}\n"
             'Or pass: {"negotiation_op":"sched_pass"} to skip inviting this slot.\n'
-            "Rules (design §3.1): Q_i=1 — at most ONE session_request per slot; if your request fails, "
+            "Rules: Q_i=1 — at most ONE session_request per slot; if your request fails, "
             "do not invite a different roster in the same slot (wait for a later slot).\n"
-            "Design §6: scheduling JSON does not consume daily formal-action budget (F_max).\n"
+            "scheduling JSON does not consume daily formal-action budget (F_max).\n"
             "`purpose` describes the meeting topic only, not binding price/deal terms.\n"
             f"Your name in this episode: {self.display_name_for(viewer)}. "
             f"Everyone in this episode: {self.format_participant_list_nl(self.agent_names)}.\n"
@@ -584,7 +584,7 @@ class NegotiationWorldController:
         pend = self.pending_invites_for(viewer)
         header_lines = [
             "Scheduling — Response round.",
-            "Invitations visible to you (other agents do not see requests they are not part of) — §3.2:",
+            "Invitations visible to you (other agents do not see requests they are not part of):",
         ]
         if pend:
             for p in pend:
@@ -619,7 +619,7 @@ class NegotiationWorldController:
             [
                 "Respond via action_type='action'. Single invite example:",
                 ex_single,
-                "Multiple invites in ONE tool call (design §3.3), example:",
+                "Multiple invites in ONE tool call, example:",
                 ex_batch,
                 "Rules: unknown/missing/unparseable → treated as decline; you may accept at most ONE invitation "
                 "that targets you — otherwise all your accepts become ineffective this slot.",
@@ -652,7 +652,7 @@ class NegotiationWorldController:
             else f"; your_macro_turns_K_i={ky} (no per-agent cap)"
         )
         budgets = (
-            f"§4.3 budgets: N_s_macro={N_s}/{T_s}{k_hint} "
+            f"N_s_macro={N_s}/{T_s}{k_hint} "
             "(order: speaker_role_order ∩ session.participants; skip agents at K_i=K_s; "
             "one macro turn consumes for pass/invalid/none/formal/control alike).\n"
         )
@@ -663,10 +663,10 @@ class NegotiationWorldController:
         sc_s = (
             f"{sc_used}/{sc_lim}"
             if sc_lim is not None
-            else f"{sc_used} (no §6 session_control cap)"
+            else f"{sc_used} (no)"
         )
         budgets += (
-            f"§6 budget hints: formal_actions_available≈min(F,H)={avail_f_s}; "
+            f"formal_actions_available≈min(F,H)={avail_f_s}; "
             f"session_control_used={sc_s}; "
             f"M_max(messages)=see max_natural_turns_per_agent_per_session in bookkeeping.\n"
         )
@@ -681,10 +681,10 @@ class NegotiationWorldController:
             + "Use natural language with action_type='speak',\n"
             "or structured formal/session_control via action_type='action' with JSON "
             "(use the same personal names as in scheduling JSON for any `receiver` field):\n"
-            "§5 contract (reference only if you are in visibility_set):\n"
+            "contract (reference only if you are in visibility_set):\n"
             "- propose: "
             '{"negotiation_op":"formal","verb":"propose_contract","terms":{"price": number, '
-            '"regulatory_required": 0|1, "financing_required"|"financing_contingent": 0|1 (§9 显式融资附条件), '
+            '"regulatory_required": 0|1, "financing_required"|"financing_contingent": 0|1, '
             '"valuation": ..., "payment": ..., "closing": ..., '
             '"compliance": ..., "penalty": ...}}\n'
             '- accept (any firm in c.parties): '
@@ -707,7 +707,7 @@ class NegotiationWorldController:
             '- regulator approve or block (visible contract): '
             '{"negotiation_op":"formal","verb":"regulatory_approve","contract_id":"optional"} | '
             '{"negotiation_op":"formal","verb":"regulatory_block","contract_id":"optional","reason":"optional"}\n'
-            "- terminate.negotiation (§6.4.4, consumes formal quota): principals end entire world; "
+            "- terminate.negotiation (consumes formal quota): principals end entire world; "
             "investor/regulator exit only financing/regulatory negotiation path.\n"
             '{"negotiation_op":"terminate_negotiation"}\n'
             "- leave session (or equivalent terminate.session): "
@@ -958,7 +958,7 @@ class NegotiationWorldController:
             else:
                 lines.append(
                     "- You DO NOT enter a session this slot. "
-                    "(§3.2: no unsolicited visibility of other negotiation groups.)"
+                    "no unsolicited visibility of other negotiation groups."
                 )
             self._last_scheduling_digest[viewer] = "\n".join(lines)
 

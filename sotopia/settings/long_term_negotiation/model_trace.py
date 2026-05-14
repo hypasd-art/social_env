@@ -10,13 +10,14 @@
   ``raw_model_content_repaired``；
 * ``parsed``：解析器产出的结构化结果。
 
-终局 ``EpisodeLLMEvaluator`` 由 ``record_terminal_eval_step`` 单独写 ``step_kind=terminal_eval``。
+终局 ``EpisodeLLMEvaluator`` 与参与者相同，经 ``agenerate`` 写入 ``input_values["agent"]="terminal_evaluator"``
+对应的 ``{stem}_terminal_evaluator.jsonl``（完整 messages / raw / parsed 等）。可选保留
+``record_terminal_eval_step`` 供外部脚本单独写精简终局行（本仓库谈判评测路径已不再调用）。
 
-``load_model_trace_rows`` 供 ``episode_execution_record`` 合并进 ``*.execution.json``。
+``load_model_trace_rows`` 供 ``episode_execution_record`` 在开启执行档案时合并进 ``*.execution.json``。
 
 **分文件策略**：``record_generation_step`` 按 ``input_values["agent"]`` 写入
-``{stem}_{<agent>}.jsonl``；无 ``agent`` 时写入 ``{stem}_no_agent.jsonl``。终局评测写入
-``{stem}_terminal_eval.jsonl``。同一场 episode 内所有文件共用单调递增的 ``step_index``，
+``{stem}_{<agent>}.jsonl``；无 ``agent`` 时写入 ``{stem}_no_agent.jsonl``。同一场 episode 内所有文件共用单调递增的 ``step_index``，
 便于跨文件按序合并。
 
 并发：同一条 episode 内日程阶段可能并行多次 ``agenerate``，对 **本 episode 的全部 trace 文件**
@@ -113,7 +114,8 @@ def begin_episode_trace(path: Path) -> Token:
     """开始一条 episode 的追踪。
 
     ``path`` 为 **逻辑上的** 主文件名（如 ``.../my_episode_tag.jsonl``）；实际写入会按 agent
-    拆成 ``my_episode_tag_firm_a.jsonl`` 等多文件，终局评测为 ``my_episode_tag_terminal_eval.jsonl``。
+    拆成 ``my_episode_tag_firm_a.jsonl`` 等多文件；终局评测走 ``agenerate`` 且 ``agent=terminal_evaluator`` 时写入
+    ``my_episode_tag_terminal_evaluator.jsonl``。
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

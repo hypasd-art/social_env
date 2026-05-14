@@ -1,6 +1,6 @@
 """长期谈判评测的 **异步批量调度**（参考 ``benchmark.run_async_benchmark_in_batch`` 的 batch/concurrency 思路）。
 
-不依赖 EpisodeLog / Redis；每条任务调用 ``run_llm_negotiation_episode_evaluation``，结果可为 JSONL。
+不依赖 EpisodeLog / Redis；每条任务调用 ``run_llm_negotiation_episode_evaluation``，结果收成可 JSON 序列化的 dict。
 
 **本模块在整条评测链中的位置**
 
@@ -28,7 +28,9 @@
 
 from __future__ import annotations
 
+import json
 import asyncio
+import math
 import sys
 import uuid
 from collections.abc import Awaitable, Sequence
@@ -83,6 +85,128 @@ def negotiation_eval_record_to_jsonable(record: dict[str, Any]) -> dict[str, Any
     return _json.loads(_json.dumps(record, default=default))
 
 
+def _finite_number(v: Any) -> float | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        x = float(v)
+    elif isinstance(v, float):
+        x = v
+    else:
+        return None
+    if not math.isfinite(x):
+        return None
+    return x
+
+
+def _mean_numeric_fields_across_rows(
+    rows: Sequence[dict[str, Any]], *, field: str = "rule_metrics"
+) -> dict[str, float]:
+    """对每条记录 ``row[field]`` 中的数值键做算术平均（非有限数或缺失则跳过该条对该键的贡献）。"""
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for row in rows:
+        blob = row.get(field)
+        if not isinstance(blob, dict):
+            continue
+        for k, v in blob.items():
+            x = _finite_number(v)
+            if x is None:
+                continue
+            sums[k] = sums.get(k, 0.0) + x
+            counts[k] = counts.get(k, 0) + 1
+    return {k: sums[k] / counts[k] for k in sorted(sums) if counts.get(k, 0) > 0}
+
+
+def _mean_llm_dimension_scores(rows: Sequence[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    """对 ``llm_dimension_scores``（agent1/agent2 → 维度→分）逐维度求平均。"""
+    sums: dict[str, dict[str, float]] = {}
+    counts: dict[str, dict[str, int]] = {}
+    for row in rows:
+        blob = row.get("llm_dimension_scores")
+        if not isinstance(blob, dict):
+            continue
+        for agent_key, dims in blob.items():
+            if not isinstance(dims, dict):
+                continue
+            if agent_key not in sums:
+                sums[agent_key] = {}
+                counts[agent_key] = {}
+            for dim, v in dims.items():
+                x = _finite_number(v)
+                if x is None:
+                    continue
+                sums[agent_key][dim] = sums[agent_key].get(dim, 0.0) + x
+                counts[agent_key][dim] = counts[agent_key].get(dim, 0) + 1
+    out: dict[str, dict[str, float]] = {}
+    for ak in sorted(sums):
+        out[ak] = {
+            d: sums[ak][d] / counts[ak][d]
+            for d in sorted(sums[ak])
+            if counts[ak].get(d, 0) > 0
+        }
+    return out
+
+
+def _overall_from_llm_rate_field(v: Any) -> float | None:
+    if v is None:
+        return None
+    top = _finite_number(v)
+    if top is not None:
+        return top
+    if isinstance(v, (list, tuple)) and len(v) >= 1:
+        return _finite_number(v[0])
+    return None
+
+
+def _mean_llm_overall_from_aggregate(rows: Sequence[dict[str, Any]]) -> dict[str, float]:
+    """从 ``llm_aggregate`` 的 ``p1_rate`` / ``p2_rate`` 抽取 overall（float 或 tuple 首元）求平均。"""
+    p1s: list[float] = []
+    p2s: list[float] = []
+    for row in rows:
+        agg = row.get("llm_aggregate")
+        if not isinstance(agg, dict):
+            continue
+        o1 = _overall_from_llm_rate_field(agg.get("p1_rate"))
+        o2 = _overall_from_llm_rate_field(agg.get("p2_rate"))
+        if o1 is not None:
+            p1s.append(o1)
+        if o2 is not None:
+            p2s.append(o2)
+    out: dict[str, float] = {}
+    if p1s:
+        out["p1_overall_mean"] = sum(p1s) / len(p1s)
+    if p2s:
+        out["p2_overall_mean"] = sum(p2s) / len(p2s)
+    return out
+
+
+def aggregate_negotiation_eval_run_means(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """对本批 ``rows`` 的重要标量结果求算术平均，供落盘与快速对比。
+
+    包含：
+
+    - ``n_episodes`` / ``terminal_success_rate``；
+    - ``rule_metrics_mean``：``rule_metrics`` 内所有有限数值字段的跨 episode 均值；
+    - ``llm_dimension_scores_mean``：若存在 ``llm_dimension_scores``，按 agent、按维度均值；
+    - ``llm_overall_mean``：若存在 ``llm_aggregate`` 的 p1/p2 overall，则单独给出均值（与维度均值互补）。
+    """
+    n = len(rows)
+    succ = sum(1 for r in rows if str(r.get("terminal") or "") == "success")
+    out: dict[str, Any] = {
+        "n_episodes": n,
+        "terminal_success_rate": (succ / n) if n else 0.0,
+        "rule_metrics_mean": _mean_numeric_fields_across_rows(rows, field="rule_metrics"),
+    }
+    dim_means = _mean_llm_dimension_scores(rows)
+    if dim_means:
+        out["llm_dimension_scores_mean"] = dim_means
+    overall = _mean_llm_overall_from_aggregate(rows)
+    if overall:
+        out["llm_overall_mean"] = overall
+    return out
+
+
 def build_eval_record(
     *,
     experiment_tag: str,
@@ -97,8 +221,19 @@ def build_eval_record(
     negotiation_run_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     llm_dump: Any = None
+    llm_dimension_scores: dict[str, dict[str, Any]] = {}
     if result.llm_aggregate is not None:
         llm_dump = result.llm_aggregate.model_dump(mode="python")
+        for idx, rate_key in ((1, "p1_rate"), (2, "p2_rate")):
+            rate_val = llm_dump.get(rate_key)
+            if (
+                isinstance(rate_val, (tuple, list))
+                and len(rate_val) >= 2
+                and isinstance(rate_val[1], dict)
+            ):
+                dims = dict(rate_val[1])
+                dims.setdefault("overall_score", rate_val[0])
+                llm_dimension_scores[f"agent{idx}"] = dims
     row = {
         "experiment_tag": experiment_tag,
         "seq": seq,
@@ -108,8 +243,11 @@ def build_eval_record(
         "num_participants": num_participants,
         "terminal": result.terminal,
         "rule_metrics": result.rule_metrics,
+        "rule_evaluation_state": result.rule_evaluation_state,
         "llm_aggregate": llm_dump,
     }
+    if llm_dimension_scores:
+        row["llm_dimension_scores"] = llm_dimension_scores
     if environment_profile_pk:
         row["environment_profile_pk"] = environment_profile_pk
     if scenario_codename:
@@ -186,23 +324,20 @@ async def run_long_term_negotiation_eval_batch_async(
     ``num_participants``（缺省由 quartet 推断）。显式 ``num_participants`` 覆盖单场人数（含场景模式）。
     此模式下 ``params`` / ``quartet`` 主参数不再用于单场时间轴与人数（仍可为无场景路径保留兼容）。
 
-    返回已序列化友好的 ``dict`` 列表（可直接写 JSONL）。
+    返回已序列化友好的 ``dict`` 列表（外层可 ``json.dumps`` 写入汇总 JSON）。
 
-    ``model_trace_dir``：若指定，每场 ``run_llm_negotiation_episode_evaluation`` 将原始 LLM
-    completion 与解析结果写入该目录下 **按 agent 分文件** 的 JSONL，并另写终局评测文件（文件名由
-    episode 的 ``tag`` 派生，见 ``model_trace``）。
+    **模型 I/O 轨迹（JSONL）**：目录取 ``model_trace_dir``，若未传则回退为 ``execution_trace_dir``
+    （与旧 CLI 只传 ``--execution-trace-dir`` 兼容）。每场在该目录下写入 ``{tag}_<名字>.jsonl``
+   （参与者 + ``terminal_evaluator`` + 可选 ``no_agent``），见 ``model_trace`` 与
+    ``llm_evaluation.run_llm_negotiation_episode_evaluation``。默认 **不再** 写 ``*.execution.json`` /
+    ``*.agent_episode.json``；若需要全局执行档案，请对单次 API 设 ``write_execution_record=True``。
 
-    ``nest_trace_dirs_by_model_time``（默认 ``False``）：为 ``True`` 时，在
-    ``model_trace_dir`` / ``execution_trace_dir`` 下追加
-    ``{sanitized_agent_model}/{run_timestamp}/``，便于按测试模型名与时间戳分子目录归档；
+    ``nest_trace_dirs_by_model_time``（默认 ``False``）：为 ``True`` 时，在用于 JSONL 的
+    根目录（上段解析后的目录）下追加 ``{sanitized_agent_model}/{run_timestamp}/``；
     ``run_timestamp`` 缺省为批量开始时生成的 ``YYYYMMDD_HHMMSS``（整条 batch 共用同一时间戳目录）。
 
-    ``execution_trace_dir``：若指定，每场结束后写入 **全局执行档案** ``*.execution.json``
-    （合同里程碑、时间线、完整 ``action_log``、**完整** ``messenger_inbox`` 等），文件名由 ``tag`` 派生；
-    同时默认写入配对的 ``*.execution.transcript.txt``（纯文本复盘稿，无截断）。
-
-    ``negotiation_run_config``：与 ``negotiation-batch --run-config`` 相同；写入每条 JSONL
-    记录的 ``negotiation_run_config`` 字段以便复现。
+    ``negotiation_run_config``：与 ``negotiation-batch --run-config`` 相同；写入每条返回记录
+    的 ``negotiation_run_config`` 字段以便复现。
     """
     if repeats_per_model < 1:
         raise ValueError("repeats_per_model must be >= 1")
@@ -272,8 +407,9 @@ async def run_long_term_negotiation_eval_batch_async(
 
             resolved_mt = _resolved_trace_base(model_trace_dir)
             resolved_et = _resolved_trace_base(execution_trace_dir)
-            if resolved_mt is not None:
-                trace_kw["model_trace_dir"] = resolved_mt
+            resolved_jsonl = resolved_mt or resolved_et
+            if resolved_jsonl is not None:
+                trace_kw["model_trace_dir"] = resolved_jsonl
                 trace_kw["model_trace_tag"] = tag
             if resolved_et is not None:
                 trace_kw["execution_trace_dir"] = resolved_et
@@ -350,6 +486,7 @@ def run_long_term_negotiation_eval_batch(
 
 
 __all__ = [
+    "aggregate_negotiation_eval_run_means",
     "asyncio_gather_bounded",
     "build_eval_record",
     "negotiation_eval_record_to_jsonable",

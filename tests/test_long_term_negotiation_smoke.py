@@ -13,6 +13,9 @@ from sotopia.settings import (
     compute_negotiation_rule_metrics,
 )
 from sotopia.settings.long_term_negotiation import compute_negotiation_final_state_metrics
+from sotopia.settings.long_term_negotiation.negotiation_metrics import (
+    build_rule_evaluation_state_record,
+)
 
 from tests.negotiation_test_personas import ARI_LYNN, MEI_OKADA, roster_keys
 
@@ -51,9 +54,14 @@ class LongTermNegotiationSmokeTest(unittest.TestCase):
             self.assertEqual(m[k], v, msg=k)
         # in a successful bilateral run, the success component must be active.
         self.assertEqual(
-            m["negotiation_final_state_score_component_terminal_success"], 0.4
+            m["negotiation_final_state_score_component_terminal_success"], 0.3
         )
 
-
+        rec = build_rule_evaluation_state_record(env)
+        self.assertIn("state_snapshot_for_rule_metrics", rec)
+        snap = rec["state_snapshot_for_rule_metrics"]
+        self.assertIsNotNone(snap)
+        self.assertEqual(snap.get("label"), "after_terminal")
+        self.assertIn("agent_resources", snap)
 if __name__ == "__main__":
     unittest.main()
