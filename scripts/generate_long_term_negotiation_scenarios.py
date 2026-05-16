@@ -1106,21 +1106,54 @@ def save_negotiation_agent_profiles_v2(
     *,
     tag: str,
     roles: tuple[str, ...],
+    agent_econ_overrides: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """按 ``roles`` 生成 ``AgentProfileV2``（与当前场景 active roster 一致）。"""
+    """按 ``roles`` 生成 ``AgentProfileV2``（与当前场景 active roster 一致）。
+
+    ``agent_econ_overrides`` 可选，角色→经济参数映射，包含:
+    - ``risk_preference``: "averse" | "neutral" | "seeking"
+    - ``initial_reputation``: float 0-100
+    - ``resource_modifiers``: dict[str, float] 对默认资源包的调整因子
+
+    未提供 override 的角色回退到原有硬编码默认值（向后兼容手写脚本）。
+    """
     bundle = default_agent_resources_bundle()
+    overrides = dict(agent_econ_overrides or {})
     v2: dict[str, Any] = {}
     for role in roles:
-        rep = (
-            float(bundle.get(role, {}).get("institutional_credibility", 50.0) or 50.0)
-            if role == "regulator"
-            else 50.0
-        )
+        ov = overrides.get(role, {})
+        # --- 初始资金：应用 resource_modifiers 到默认 bundle ---
+        default_res = {k: float(v) for k, v in dict(bundle.get(role, {"cash": 0.0})).items()}
+        mods = ov.get("resource_modifiers") if isinstance(ov.get("resource_modifiers"), dict) else {}
+        if mods:
+            res = dict(default_res)
+            for key, factor in mods.items():
+                if key in res and isinstance(factor, (int, float)):
+                    res[key] = round(float(res[key]) * float(factor), 2)
+            initial_resources = res
+        else:
+            initial_resources = default_res
+
+        # --- 初始声誉 ---
+        rep = ov.get("initial_reputation") if isinstance(ov.get("initial_reputation"), (int, float)) else None
+        if rep is None:
+            rep = (
+                float(bundle.get(role, {}).get("institutional_credibility", 50.0) or 50.0)
+                if role == "regulator"
+                else 50.0
+            )
+        else:
+            rep = float(max(0.0, min(100.0, rep)))
+
+        # --- 风险偏好 ---
+        rp = ov.get("risk_preference") if isinstance(ov.get("risk_preference"), str) else None
+        risk = rp if rp in ("averse", "neutral", "seeking") else "neutral"
+
         upgraded = upgrade_agent_profile(
             agents_by_role[role],
-            initial_resources={k: float(v) for k, v in dict(bundle.get(role, {"cash": 0.0})).items()},
+            initial_resources=initial_resources,
             initial_reputation=rep,
-            risk_preference="neutral",
+            risk_preference=risk,
             role_type=role,
         )
         upgraded.tag = tag
@@ -1140,11 +1173,15 @@ def persist_scenario_v2(
     v2_by_role: dict[str, Any],
     num_participants: int | None = None,
     lineup: str = NEGOTIATION_LINEUP_FIRMS_ONLY,
+    market_state_override: dict[str, float] | None = None,
+    psych_variables: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[Any, Contract | None, Any]:
     """落库单个场景的 ``EnvironmentProfileV2``、``SystemStateSnapshot``、可选 ``Contract``。
 
     ``lineup`` 决定 N 名 canonical 角色顺序：``with_institutional`` → ``SESSION_SPEAKER_ROLE_ORDER``；
     ``firms_only`` → ``SESSION_FIRMS_ONLY_ROLE_ORDER``（公司自相谈，无机构位）。
+
+    ``market_state_override`` 和 ``psych_variables`` 可选；来自 LLM 扩展合成流程。
     """
     n_agents = num_participants if num_participants is not None else (4 if quartet else 2)
     if n_agents < 2 or n_agents > 4:
@@ -1161,11 +1198,16 @@ def persist_scenario_v2(
     lgm = legacy_env.game_metadata if isinstance(legacy_env.game_metadata, dict) else {}
     env_ctx = dict(lgm.get("environment_context", {}) or {})
     env_scene = dict(lgm.get("environment_scene", {}) or {})
-    physical_params = dict(env_ctx.get("physical_social_parameters", {}) or {})
-    md_init: dict[str, Any] = {
-        **timeline_meta,
-        "negotiation_logical_resources_by_role": {k: dict(v) for k, v in bundle.items()},
-        "market_state": {
+
+    # market_state: 优先使用 game_metadata 中的合成值（V2 extended），其次参数传入，最后硬编码
+    gm_market_state = lgm.get("market_state")
+    if isinstance(gm_market_state, dict) and gm_market_state:
+        market_state = {str(k): float(v) for k, v in gm_market_state.items()}
+    elif market_state_override:
+        market_state = dict(market_state_override)
+    else:
+        physical_params = dict(env_ctx.get("physical_social_parameters", {}) or {})
+        market_state = {
             "interest_rate": 0.042,
             "regulatory_stringency": 1.0,
             "foot_traffic": float(physical_params.get("foot_traffic", 0.6) or 0.6),
@@ -1174,11 +1216,25 @@ def persist_scenario_v2(
             "labor_supply_tightness": float(physical_params.get("labor_supply_tightness", 0.5) or 0.5),
             "skill_complementarity_index": float(physical_params.get("skill_complementarity_index", 0.5) or 0.5),
             "bid_spread_index": float(physical_params.get("bid_spread_index", 0.5) or 0.5),
-        },
+        }
+
+    # psych_variables: 优先使用 game_metadata 中的合成值，其次参数传入
+    gm_psych = lgm.get("agent_psych_variables")
+    psych = (
+        dict(gm_psych) if isinstance(gm_psych, dict) and gm_psych
+        else dict(psych_variables or {})
+    )
+
+    md_init: dict[str, Any] = {
+        **timeline_meta,
+        "negotiation_logical_resources_by_role": {k: dict(v) for k, v in bundle.items()},
+        "market_state": market_state,
         "environment_scene": env_scene,
         "environment_context": env_ctx,
         "pipeline": "long_term_negotiation",
     }
+    if psych:
+        md_init["agent_psych_variables"] = psych
 
     v2_env = upgrade_environment_profile(
         legacy_env,

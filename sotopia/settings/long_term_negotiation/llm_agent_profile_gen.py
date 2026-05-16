@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from typing import Any, ClassVar, Sequence
 
 from pydantic import BaseModel, Field
@@ -100,6 +101,35 @@ class LLMNegotiationAgentDraft(BaseModel):
         default="",
         description="Short non-public personal preference or private BATNA hint of THIS person; may be empty.",
     )
+    risk_preference: str = Field(
+        default="neutral",
+        description=(
+            "Risk attitude of THIS person in deal-making: 'averse' (prefers downside protection, "
+            "staged commitments), 'neutral' (weighs expected value), or 'seeking' (chases upside, "
+            "tolerates volatility). MUST vary across roles — not all 'neutral'."
+        ),
+    )
+    initial_reputation: float = Field(
+        default=50.0,
+        description=(
+            "Initial reputation score 0-100 for THIS person in the market. High (70-90) for "
+            "established incumbents with loyal customers; medium (40-60) for regular traders; "
+            "low (15-35) for newcomers, challengers, or those with known defaults. "
+            "MUST be differentiated across roles based on market position."
+        ),
+    )
+    resource_modifiers: dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Multipliers applied to the default resource bundle for this role's side. "
+            "Keys match resource fields (cash, daily_fixed_cost, short_term_debt_due, asset, liability). "
+            "Values around 1.0 mean no change; >1.0 increases the resource; <1.0 decreases it. "
+            "Example: a cash-strapped challenger might have {'cash': 0.7, 'short_term_debt_due': 1.3}. "
+            "An incumbent with deep pockets: {'cash': 1.4, 'daily_fixed_cost': 1.1}. "
+            "Omit keys that stay at default. MUST differentiate at least 2 roles per scenario. "
+            "If not specified, defaults to empty dict (no modification)."
+        ),
+    )
 
 
 _PROMPT_TEMPLATE = """Generate a fictional JSON **agent profile** for a single **human negotiator** taking
@@ -131,10 +161,20 @@ Constraints (MUST follow):
 - **Benchmark alignment:** The downstream simulator injects ``[dialogue_voice]`` / DialogueVoice into private goals;
   keep ``decision_making_style`` and ``personality_and_values`` consistent with that voice so multi-day transcripts stay distinguishable.
 - No sensitive personal data, no real public figures.
+- **Economic differentiation — CRITICAL:** The three fields below MUST NOT all be default across roles.
+  At least 2 roles in the same episode must have noticeably different ``risk_preference``, ``initial_reputation``,
+  or ``resource_modifiers``.
+  * ``risk_preference``: Match to the archetype — a decisive-competitor or opportunistic-bargainer is typically
+    "seeking"; a risk-averse-stabilizer or principled-guardian is "averse"; others may be "neutral".
+  * ``initial_reputation``: Incumbents with long lane history get 65-85; regular traders get 40-60;
+    newcomers/challengers get 20-35; a regulator with strong public trust gets 70-90.
+  * ``resource_modifiers``: Financially pressured roles should have cash < 1.0 (e.g. 0.6-0.85) and
+    short_term_debt_due > 1.0 (e.g. 1.15-1.4). Cash-rich roles get cash > 1.0 (e.g. 1.15-1.5).
+    The modifiers MUST reflect the persona's market position and survival pressure.
 
 Output ONLY a JSON OBJECT WITH FILLED-IN VALUES (do NOT echo a JSON schema, do NOT include
 ``description`` / ``type`` / ``properties`` keys, do NOT wrap in markdown). Use exactly these
-keys (string / int / list[str] as shown):
+keys (string / int / float / list[str] / dict as shown):
 
 {{
   "first_name": "...",
@@ -149,7 +189,10 @@ keys (string / int / list[str] as shown):
   "schwartz_personal_values": ["achievement", "security"],
   "personality_and_values": "...",
   "decision_making_style": "...",
-  "secret": ""
+  "secret": "",
+  "risk_preference": "neutral",
+  "initial_reputation": 50.0,
+  "resource_modifiers": {{"cash": 1.0}}
 }}
 
 Reference field semantics (DO NOT include the schema itself in the output):
@@ -421,6 +464,64 @@ def _archetype_briefs_for_roles(roles: Sequence[str], *, tag: str) -> dict[str, 
     return out
 
 
+_ECON_SECRET_KEY = "__v2_econ__"
+
+
+def _encode_econ_secret(draft: LLMNegotiationAgentDraft) -> str:
+    """将 LLM 生成的经济参数编码到 secret 字段，供 ``save_negotiation_agent_profiles_v2`` 解析。"""
+    econ: dict[str, Any] = {
+        "risk_preference": str(draft.risk_preference or "neutral"),
+        "initial_reputation": float(draft.initial_reputation if draft.initial_reputation is not None else 50.0),
+    }
+    mods = dict(draft.resource_modifiers or {})
+    if mods:
+        econ["resource_modifiers"] = {str(k): float(v) for k, v in mods.items() if isinstance(v, (int, float))}
+    personal_note = (draft.secret or "").strip()
+    payload = {_ECON_SECRET_KEY: econ}
+    if personal_note:
+        payload["personal"] = personal_note[:240]
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def parse_llm_econ_overrides(agent_profile_secret: str) -> dict[str, Any]:
+    """从 AgentProfile.secret 解析 LLM 生成的经济参数。
+
+    返回字典包含:
+    - ``risk_preference``: str | None
+    - ``initial_reputation``: float | None
+    - ``resource_modifiers``: dict[str, float] | None
+    解析失败时返回空字典。
+    """
+    secret = (agent_profile_secret or "").strip()
+    if not secret:
+        return {}
+    try:
+        payload = json.loads(secret)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    econ = payload.get(_ECON_SECRET_KEY)
+    if not isinstance(econ, dict):
+        return {}
+    result: dict[str, Any] = {}
+    rp = econ.get("risk_preference")
+    if isinstance(rp, str) and rp in ("averse", "neutral", "seeking"):
+        result["risk_preference"] = rp
+    ir = econ.get("initial_reputation")
+    if isinstance(ir, (int, float)):
+        result["initial_reputation"] = float(max(0.0, min(100.0, ir)))
+    rm = econ.get("resource_modifiers")
+    if isinstance(rm, dict):
+        clean: dict[str, float] = {}
+        for k, v in rm.items():
+            if isinstance(v, (int, float)):
+                clean[str(k)] = float(v)
+        if clean:
+            result["resource_modifiers"] = clean
+    return result
+
+
 def build_static_negotiation_agent_profile(role: str, *, tag: str) -> AgentProfile:
     """从 ``DEFAULT_HUMAN_PERSONAS`` 装出一个**自然人** ``AgentProfile``。"""
     if role not in DEFAULT_HUMAN_PERSONAS:
@@ -430,6 +531,16 @@ def build_static_negotiation_agent_profile(role: str, *, tag: str) -> AgentProfi
         )
     persona = DEFAULT_HUMAN_PERSONAS[role]
     public_info = (persona["public_info"] or ROLE_SUMMARY_EN.get(role, "")).strip()
+    secret = json.dumps(
+        {
+            _ECON_SECRET_KEY: {
+                "risk_preference": "neutral",
+                "initial_reputation": 50.0,
+            },
+            "personal": str(persona.get("secret", ""))[:240],
+        },
+        ensure_ascii=False,
+    )
     return AgentProfile(
         first_name=str(persona["first_name"])[:12],
         last_name=str(persona["last_name"])[:16],
@@ -443,7 +554,7 @@ def build_static_negotiation_agent_profile(role: str, *, tag: str) -> AgentProfi
         moral_values=list(persona["moral_values"]),
         schwartz_personal_values=list(persona["schwartz_personal_values"]),
         big_five=str(persona["big_five"])[:240],
-        secret=str(persona["secret"])[:240],
+        secret=secret,
         model_id=f"negotiation-{role}-{tag}",
         tag=tag,
     )
@@ -496,7 +607,7 @@ def _draft_to_agent_profile(
                 "Agreeableness: medium; Neuroticism: medium",
             )
         ),
-        secret=_truncate_str(draft.secret, 240),
+        secret=_encode_econ_secret(draft),
         model_id=f"negotiation-{role}-{tag}",
         tag=tag,
     )

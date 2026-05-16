@@ -635,10 +635,10 @@ async def agenerate_action(
     except Exception as e:
         # structured output 不受支持时（如 DeepSeek），回退到非 structured 模式重试一次
         if structured_output and _is_response_format_unavailable_error(e):
-            log.warning(
-                "structured output unavailable for %s; retrying without response_format",
-                model_name,
-            )
+            # log.warning(
+            #     "structured output unavailable for %s; retrying without response_format",
+            #     model_name,
+            # )
             try:
                 return await agenerate_action(
                     model_name=model_name,
@@ -657,9 +657,9 @@ async def agenerate_action(
                     use_fixed_model_version=use_fixed_model_version,
                 )
             except Exception as e2:
-                log.warning(f"Failed to generate action (fallback) due to {e2}")
+                # log.warning(f"Failed to generate action (fallback) due to {e2}")
                 return AgentAction(action_type="none", argument="", to=[])
-        log.warning(f"Failed to generate action due to {e}")
+        # log.warning(f"Failed to generate action due to {e}")
         return AgentAction(action_type="none", argument="", to=[])
 
 

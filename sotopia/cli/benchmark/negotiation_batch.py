@@ -68,123 +68,6 @@ import typer
 
 from ..app import app
 
-def _fmt(v: Any, precision: int = 4) -> str:
-    """Safe float formatting."""
-    if isinstance(v, (int, float)):
-        return f"{v:.{precision}f}"
-    return str(v)
-
-
-def _print_evaluation_summary(rows: list[dict[str, Any]], aggregate_means: dict[str, Any]) -> None:
-    """打印批量评测结果的重要汇总信息。"""
-    n = len(rows)
-    successes = sum(1 for r in rows if str(r.get("terminal") or "") == "success")
-    timeouts = sum(1 for r in rows if str(r.get("terminal") or "") == "timeout")
-    failures = sum(1 for r in rows if str(r.get("terminal") or "") == "failure")
-    others = n - successes - timeouts - failures
-    rm = aggregate_means.get("rule_metrics_mean") or {}
-
-    # ── Header ──
-    typer.echo("")
-    typer.echo(typer.style("=" * 64, fg=typer.colors.BRIGHT_BLACK))
-    typer.echo(typer.style("  EVALUATION RESULTS", fg=typer.colors.BRIGHT_CYAN, bold=True))
-    typer.echo(typer.style("=" * 64, fg=typer.colors.BRIGHT_BLACK))
-
-    # ── Terminal Status ──
-    typer.echo(typer.style("\n── Terminal Status ──", fg=typer.colors.YELLOW, bold=True))
-    typer.echo(f"  Episodes:           {n}")
-    typer.echo(f"  Success:            {successes} ({_fmt(100 * successes / n if n else 0, 1)}%)")
-    typer.echo(f"  Timeout:            {timeouts} ({_fmt(100 * timeouts / n if n else 0, 1)}%)")
-    typer.echo(f"  Failure:            {failures} ({_fmt(100 * failures / n if n else 0, 1)}%)")
-    if others:
-        typer.echo(f"  Other:              {others}")
-
-    # ── Final State Score ──
-    fs = rm.get("negotiation_final_state_score")
-    typer.echo(typer.style("\n── Final State Score (mean) ──", fg=typer.colors.YELLOW, bold=True))
-    typer.echo(f"  Overall Score:      {_fmt(fs) if fs is not None else 'n/a'}")
-
-    components = [
-        ("terminal_success", "Terminal Success"),
-        ("primary_contract", "Primary Contract"),
-        ("solvency", "Solvency"),
-        ("liquidity_preserved", "Liquidity Preserved"),
-        ("predefined_rule", "Predefined Rule"),
-        ("scheduling_effectiveness", "Scheduling Effectiveness"),
-    ]
-    for key, label in components:
-        val = rm.get(f"negotiation_final_state_score_component_{key}")
-        if val is not None:
-            typer.echo(f"    {label:<28s} {_fmt(val)}")
-
-    # ── Key Rule Metrics ──
-    typer.echo(typer.style("\n── Rule Metrics (mean) ──", fg=typer.colors.YELLOW, bold=True))
-    rule_keys = [
-        ("negotiation_macro_steps_used", "Macro Steps"),
-        ("negotiation_n_session_log", "Sessions"),
-        ("negotiation_n_action_log", "Actions"),
-        ("negotiation_n_message_log", "Messages"),
-        ("negotiation_participant_mean_cash", "Mean Cash"),
-        ("negotiation_participant_min_cash", "Min Cash"),
-        ("negotiation_primary_contract_phase", "Contract Phase (0-4)"),
-        ("negotiation_final_state_total_cash", "Final Total Cash"),
-        ("negotiation_final_state_total_cash_delta", "Cash Delta"),
-        ("negotiation_final_state_solvency_ratio", "Solvency Ratio"),
-    ]
-    for key, label in rule_keys:
-        val = rm.get(key)
-        if val is not None:
-            typer.echo(f"  {label:<28s} {_fmt(val)}")
-
-    # ── Per-agent Profit/Loss ──
-    profit_keys = [k for k in rm if "individual_profit" in k or "company_profit" in k]
-    if profit_keys:
-        typer.echo(typer.style("\n── Profit / Loss (mean) ──", fg=typer.colors.YELLOW, bold=True))
-        for k in sorted(profit_keys):
-            typer.echo(f"  {k:<40s} {_fmt(rm[k])}")
-
-    # ── Predefined Rule Details ──
-    rule_detail_keys = [
-        ("negotiation_predefined_rule_score", "Predef Rule Score"),
-        ("negotiation_predefined_rule_realized_margin", "Realized Margin"),
-        ("negotiation_predefined_rule_realized_price", "Realized Price"),
-        ("negotiation_predefined_rule_reference_price", "Reference Price"),
-        ("negotiation_predefined_rule_buyer_savings_ratio", "Buyer Savings Ratio"),
-        ("negotiation_predefined_rule_total_profit", "Total Profit"),
-        ("negotiation_predefined_rule_contract_value", "Contract Value"),
-    ]
-    shown = False
-    for key, label in rule_detail_keys:
-        val = rm.get(key)
-        if val is not None:
-            if not shown:
-                typer.echo(typer.style("\n── Predefined Rule Details (mean) ──", fg=typer.colors.YELLOW, bold=True))
-                shown = True
-            typer.echo(f"  {label:<28s} {_fmt(val)}")
-
-    # ── LLM Evaluation Scores ──
-    llm_overall = aggregate_means.get("llm_overall_mean")
-    llm_dims = aggregate_means.get("llm_dimension_scores_mean")
-    if llm_overall or llm_dims:
-        typer.echo(typer.style("\n── LLM Evaluation (mean) ──", fg=typer.colors.YELLOW, bold=True))
-        if llm_overall and isinstance(llm_overall, dict):
-            for k, v in llm_overall.items():
-                typer.echo(f"  {k:<28s} {_fmt(v)}")
-        if llm_dims and isinstance(llm_dims, dict):
-            for agent_key, dims in llm_dims.items():
-                if isinstance(dims, dict):
-                    typer.echo(f"  [{agent_key}]")
-                    for dk, dv in dims.items():
-                        typer.echo(f"    {dk:<26s} {_fmt(dv)}")
-
-    typer.echo("")
-    typer.echo(typer.style("=" * 64, fg=typer.colors.BRIGHT_BLACK))
-    typer.echo(typer.style(f"  Done. {n} episodes | {successes} success | "
-                           f"mean score={_fmt(fs) if fs is not None else 'n/a'}",
-                           fg=typer.colors.GREEN, bold=True))
-    typer.echo(typer.style("=" * 64, fg=typer.colors.BRIGHT_BLACK))
-    typer.echo("")
-
 
 @app.command("negotiation-batch")
 def negotiation_batch(
@@ -323,9 +206,10 @@ def negotiation_batch(
     ``run_long_term_negotiation_eval_batch``。
     """
     from sotopia.settings import NegotiationTimelineParams
-    from sotopia.settings.long_term_negotiation.batch_evaluation import (
-        aggregate_negotiation_eval_run_means,
-        run_long_term_negotiation_eval_batch,
+    from sotopia.settings.long_term_negotiation.batch_evaluation_multi import (
+        aggregate_negotiation_eval_run_means_by_model,
+        print_evaluation_summary_multi,
+        run_long_term_negotiation_eval_batch_multi,
     )
     from sotopia.settings.long_term_negotiation.eval_logging import (
         configure_negotiation_cli_logging,
@@ -440,7 +324,7 @@ def negotiation_batch(
         )
     )
     try:
-        rows = run_long_term_negotiation_eval_batch(
+        rows = run_long_term_negotiation_eval_batch_multi(
             agent_models=models,
             evaluator_model=evaluator_model,
             quartet=False if scenario_pks else quartet,
@@ -458,7 +342,7 @@ def negotiation_batch(
             nest_trace_dirs_by_model_time=not trace_flat,
             run_timestamp=ts,
         )
-        aggregate_means = aggregate_negotiation_eval_run_means(rows)
+        aggregate_means = aggregate_negotiation_eval_run_means_by_model(rows)
     except Exception as exc:  # pragma: no cover
         typer.echo(typer.style(str(exc), fg=typer.colors.RED, bold=True), err=True)
         raise typer.Exit(code=1) from exc
@@ -490,9 +374,7 @@ def negotiation_batch(
         out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         typer.echo(typer.style(f"Saved {len(rows)} records to {out_file}", fg=typer.colors.GREEN))
 
-    successes = sum(1 for r in rows if r.get("terminal") == "success")
-    rm = aggregate_means.get("rule_metrics_mean") or {}
-    _print_evaluation_summary(rows, aggregate_means)
+    print_evaluation_summary_multi(rows, aggregate_means)
 
 
 def main() -> None:

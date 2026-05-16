@@ -1,0 +1,30 @@
+{
+    "firm_a": {
+        "cash": 500.0,
+        "asset": 0.0,
+        "liability": 0.0,
+        "daily_fixed_cost": 95.0,
+        "short_term_debt_due": 160.0
+    },
+    "firm_b": {
+        "cash": 450.0,
+        "asset": 1.0,
+        "liability": 0.0,
+        "daily_fixed_cost": 110.0,
+        "short_term_debt_due": 130.0
+    },
+    "firm_c": {
+        "cash": 420.0,
+        "asset": 0.0,
+        "liability": 0.0,
+        "daily_fixed_cost": 100.0,
+        "short_term_debt_due": 200.0
+    },
+    "firm_d": {
+        "cash": 440.0,
+        "asset": 0.0,
+        "liability": 0.0,
+        "daily_fixed_cost": 90.0,
+        "short_term_debt_due": 160.0
+    }
+}

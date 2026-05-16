@@ -198,6 +198,16 @@ def _compute_predefined_rule_payout_metrics(
         out["negotiation_predefined_rule_enabled"] = 0.0
         return out, 0.0
 
+    # V2: 委托扩展模块的确定性 payout
+    if str(predefined_outcome_rule.get("version") or "") == "v2":
+        from .extended_negotiation_metrics import compute_v2_payout
+
+        return compute_v2_payout(
+            env=env,
+            primary_factor=primary_factor,
+            rule=predefined_outcome_rule,
+        )
+
     if str(predefined_outcome_rule.get("payout_mode") or "").strip() == "procurement_savings":
         return _compute_procurement_savings_metrics(
             env=env,
@@ -220,7 +230,7 @@ def _compute_predefined_rule_payout_metrics(
     execution_weight = float(mf_dict.get("execution_weight", 0.45) or 0.45)
 
     bounds = predefined_outcome_rule.get("profit_margin_bounds")
-    if isinstance(bounds, list | tuple) and len(bounds) >= 2:
+    if isinstance(bounds, (list, tuple)) and len(bounds) >= 2:
         lo = float(bounds[0])
         hi = float(bounds[1])
     else:

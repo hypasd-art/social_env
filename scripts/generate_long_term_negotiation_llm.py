@@ -89,6 +89,7 @@ from sotopia.settings.long_term_negotiation.llm_agent_profile_gen import (  # no
     DEFAULT_COMPANY_LLM_ROLES,
     agenerate_negotiation_agent_profiles,
     agent_profile_to_jsonable,
+    parse_llm_econ_overrides,
 )
 from sotopia.settings.long_term_negotiation.scenario_loader import (
     DIALOGUE_STYLE_SYNTHESIS_APPEND_EN,
@@ -1151,7 +1152,23 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
                 llm_roles=llm_roles_active,
             )
         ltr.pairwise_strangers(agents, tag=agent_bind_tag, roles=active_roles)
-        v2_agents = ltr.save_negotiation_agent_profiles_v2(agents, tag=agent_bind_tag, roles=active_roles)
+
+        # 解析 LLM 生成的经济参数（risk_preference / initial_reputation / resource_modifiers）
+        agent_econ_overrides: dict[str, dict[str, Any]] = {}
+        for role in active_roles:
+            ap = agents.get(role)
+            if ap is not None:
+                econ = parse_llm_econ_overrides(getattr(ap, "secret", "") or "")
+                if econ:
+                    agent_econ_overrides[role] = econ
+        if agent_econ_overrides:
+            print(
+                f"  [econ] LLM-generated econ overrides for roles: {sorted(agent_econ_overrides)}"
+            )
+        v2_agents = ltr.save_negotiation_agent_profiles_v2(
+            agents, tag=agent_bind_tag, roles=active_roles,
+            agent_econ_overrides=agent_econ_overrides if agent_econ_overrides else None,
+        )
 
         roles = _roles_for_mode(mode)
         combo = ltr.save_combo(env_llm, roles, agents)

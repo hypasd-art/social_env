@@ -153,7 +153,10 @@ class LongTermNegotiationEnv(MessengerMixin):
                 _bind(dict(self.agent_display_names))
 
     def _apply_contract_status_settlement_if_needed(self) -> None:
-        """按主合同状态自动结算，并把收益写回 ``SystemState.agent_resources``。"""
+        """按主合同状态自动结算，并把收益写回 ``SystemState.agent_resources``。
+
+        V2 规则（version=="v2"）走确定性结算，V1 走原始 margin_split/procurement_savings。
+        """
         if self._contract_status_settlement_applied:
             return
         if not self.predefined_outcome_rule:
@@ -168,13 +171,23 @@ class LongTermNegotiationEnv(MessengerMixin):
         if status not in {"proposed", "amended", "accepted", "signed", "rejected", "failed"}:
             return
 
-        from .negotiation_metrics import compute_predefined_rule_settlement_by_contract_status
+        # V2: 委托扩展模块的确定性结算
+        if str(self.predefined_outcome_rule.get("version") or "") == "v2":
+            from .extended_negotiation_metrics import compute_v2_settlement_by_contract_status as _settle
 
-        metrics = compute_predefined_rule_settlement_by_contract_status(
-            env=self,
-            predefined_outcome_rule=self.predefined_outcome_rule,
-            contract_status=status,
-        )
+            metrics = _settle(
+                env=self,
+                predefined_outcome_rule=self.predefined_outcome_rule,
+                contract_status=status,
+            )
+        else:
+            from .negotiation_metrics import compute_predefined_rule_settlement_by_contract_status as _settle
+
+            metrics = _settle(
+                env=self,
+                predefined_outcome_rule=self.predefined_outcome_rule,
+                contract_status=status,
+            )
 
         settlement_by_agent: dict[str, float] = {}
         for agent in self.system_state.agent_keys:

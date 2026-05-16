@@ -313,16 +313,47 @@ def _build_role_addons_from_env_binding(
 def _initial_resources_for_roster_from_env(
     environment_profile_pk: str | None,
     roster: tuple[str, ...],
+    *,
+    game_metadata: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, float]] | None:
-    """从场景绑定的 ``AgentProfileV2.initial_resources`` 合并进默认 bundle，供 ``LongTermNegotiationEnv`` 使用。
+    """按优先级解析初始资金。
 
-    若无 combo、或无任一 V2 含数值型 ``initial_resources`` 条目，返回 ``None``（环境走原有默认逻辑）。
+    1. game_metadata["initial_resources_by_role"] — 场景合成时指定（最高优先级）
+    2. AgentProfileV2.initial_resources — 数据库已有字段
+    3. default_agent_resources_bundle() — 硬编码兜底（返回 None，由 Env 默认处理）
     """
-    if not environment_profile_pk:
-        return None
     from .roles import default_agent_resources_bundle
 
     default_bundle = default_agent_resources_bundle()
+
+    def _base_for(role: str) -> dict[str, float]:
+        raw = dict(default_bundle.get(role, {"cash": 400.0}))
+        return {str(k): float(v) for k, v in raw.items()}
+
+    # Priority 1: game_metadata.initial_resources_by_role
+    gm = game_metadata or {}
+    ir_from_gm = gm.get("initial_resources_by_role")
+    if isinstance(ir_from_gm, dict):
+        result: dict[str, dict[str, float]] = {}
+        for role in roster:
+            role_res = ir_from_gm.get(role)
+            if isinstance(role_res, dict):
+                result[role] = {
+                    str(k): float(v)
+                    for k, v in role_res.items()
+                    if isinstance(v, (int, float))
+                }
+        if result:
+            # Fill missing roles from default bundle
+            for role in roster:
+                if role not in result:
+                    result[role] = _base_for(role)
+            return result
+
+    if not environment_profile_pk:
+        return None
+
+    # Priority 2: AgentProfileV2.initial_resources from DB
     try:
         combos = list(
             EnvAgentComboStorage.find(  # type: ignore[attr-defined]
@@ -337,10 +368,6 @@ def _initial_resources_for_roster_from_env(
     combo = combos[0]
     agent_ids = list(getattr(combo, "agent_ids", []) or [])
     role_to_pk = {role: agent_ids[i] for i, role in enumerate(roster) if i < len(agent_ids)}
-
-    def _base_for(role: str) -> dict[str, float]:
-        raw = dict(default_bundle.get(role, {"cash": 400.0}))
-        return {str(k): float(v) for k, v in raw.items()}
 
     merged: dict[str, dict[str, float]] = {}
     touched = False
@@ -426,6 +453,7 @@ async def run_llm_negotiation_episode_evaluation(
     lineup_from_scen: str | None = None
     predefined_rule: dict[str, Any] | None = None
     gm: dict[str, Any] = {}
+    psych_vars_from_synthesis: dict[str, dict[str, Any]] = {}
     if environment_profile_pk:
         scen = load_negotiation_scenario_from_environment_profile_pk(environment_profile_pk)
         env_profile = EnvironmentProfile.get(environment_profile_pk)
@@ -437,6 +465,25 @@ async def run_llm_negotiation_episode_evaluation(
         n_from_scen = scen.num_participants
         lineup_from_scen = scen.lineup
         params_run = scen.params if params is None else params
+        # 读取合成阶段生成的 psych 变量（优先 game_metadata，其次 EnvironmentProfileV2）
+        psych_vars_from_synthesis: dict[str, dict[str, Any]] = {}
+        raw_psych = gm.get("agent_psych_variables")
+        if isinstance(raw_psych, dict):
+            psych_vars_from_synthesis = {
+                str(k): dict(v) for k, v in raw_psych.items() if isinstance(v, dict)
+            }
+        if not psych_vars_from_synthesis:
+            try:
+                from sotopia.database import EnvironmentProfileV2
+                v2_env = EnvironmentProfileV2.get(environment_profile_pk)
+                ssi = v2_env.system_state_init if isinstance(v2_env.system_state_init, dict) else {}
+                raw_v2_psych = ssi.get("agent_psych_variables")
+                if isinstance(raw_v2_psych, dict):
+                    psych_vars_from_synthesis = {
+                        str(k): dict(v) for k, v in raw_v2_psych.items() if isinstance(v, dict)
+                    }
+            except Exception:
+                pass
     else:
         strict_run = quartet
         params_run = params or NegotiationTimelineParams(
@@ -488,13 +535,16 @@ async def run_llm_negotiation_episode_evaluation(
                     base_goal = str(getattr(ag, "goal", "") or "")
                     ag.goal = (base_goal + "\n\n" + closer).strip() if base_goal else closer.strip()
 
-        init_res = _initial_resources_for_roster_from_env(environment_profile_pk, roster)
+        init_res = _initial_resources_for_roster_from_env(
+            environment_profile_pk, roster, game_metadata=gm
+        )
         env = LongTermNegotiationEnv(
             agents_map,
             params=params_run,
             strict_design_v1=strict_run,
             predefined_outcome_rule=predefined_rule,
             initial_resources=init_res,
+            agent_psych_variables=psych_vars_from_synthesis or None,
         )
 
         terminal = await env.run_episode_async(max_macro_steps=max_macro_steps)
