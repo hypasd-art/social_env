@@ -1,0 +1,1406 @@
+{
+  "run_started_at": "2026-05-17 12:14:23",
+  "run_timestamp": "20260517_121423",
+  "tag": "ltr_v2_merged",
+  "agent_models": [
+    "custom/deepseek-v4-flash@https://api.deepseek.com"
+  ],
+  "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+  "aggregate_means": {
+    "overall": {
+      "n_episodes": 5,
+      "terminal_success_rate": 0.0,
+      "rule_metrics_mean": {
+        "negotiation_final_state_day_closed": 3.4,
+        "negotiation_final_state_min_cash": 316.8,
+        "negotiation_final_state_n_snapshots": 3.4,
+        "negotiation_final_state_n_solvent": 3.4,
+        "negotiation_final_state_score": 0.182,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.02,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.162,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_final_state_total_cash": 1221.0,
+        "negotiation_final_state_total_cash_delta": -111.0,
+        "negotiation_macro_steps_used": 16.8,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_n_session_log": 4.8,
+        "negotiation_participant_mean_cash": 359.1166666666667,
+        "negotiation_participant_min_cash": 316.8,
+        "negotiation_predefined_rule_buyer_savings_per_unit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_ratio": 0.0,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_contract_value": 280200000.0,
+        "negotiation_predefined_rule_cost_price": 142.1577190340816,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_d": 0.0,
+        "negotiation_predefined_rule_news_signal": -0.05476505948494237,
+        "negotiation_predefined_rule_payout_mode_v2_buy_sell": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_realized_price": 0.0,
+        "negotiation_predefined_rule_reference_price": 203.38261165784704,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_predefined_rule_seller_earnings_per_unit": 0.0,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_visible_history_total_lines": 0.0
+      },
+      "llm_dimension_scores_mean": {
+        "agent1": {
+          "believability": 6.4,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.8,
+          "knowledge": 0.4,
+          "overall_score": 4.6000000000000005,
+          "relationship": 5.0,
+          "social_rules": 10.0
+        },
+        "agent2": {
+          "believability": 6.6,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "knowledge": 0.6,
+          "overall_score": 4.7,
+          "relationship": 5.0,
+          "social_rules": 10.0
+        },
+        "agent3": {
+          "believability": 6.2,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.8,
+          "knowledge": 0.4,
+          "overall_score": 4.6,
+          "relationship": 5.2,
+          "social_rules": 10.0
+        },
+        "agent4": {
+          "believability": 7.5,
+          "financial_and_material_benefits": 5.0,
+          "goal": 2.0,
+          "knowledge": 0.5,
+          "overall_score": 5.0,
+          "relationship": 5.0,
+          "social_rules": 10.0
+        }
+      },
+      "llm_overall_mean": {
+        "p1_overall_mean": 4.6000000000000005,
+        "p2_overall_mean": 4.7
+      }
+    },
+    "by_model": {
+      "custom/deepseek-v4-flash@https://api.deepseek.com": {
+        "model_display": "deepseek-v4-flash",
+        "model_full": "custom/deepseek-v4-flash@https://api.deepseek.com",
+        "n_episodes": 5,
+        "terminal_success_rate": 0.0,
+        "rule_metrics_mean": {
+          "negotiation_final_state_day_closed": 3.4,
+          "negotiation_final_state_min_cash": 316.8,
+          "negotiation_final_state_n_snapshots": 3.4,
+          "negotiation_final_state_n_solvent": 3.4,
+          "negotiation_final_state_score": 0.182,
+          "negotiation_final_state_score_component_liquidity_preserved": 0.02,
+          "negotiation_final_state_score_component_predefined_rule": 0.0,
+          "negotiation_final_state_score_component_primary_contract": 0.0,
+          "negotiation_final_state_score_component_scheduling_effectiveness": 0.0,
+          "negotiation_final_state_score_component_solvency": 0.162,
+          "negotiation_final_state_score_component_terminal_success": 0.0,
+          "negotiation_final_state_solvency_ratio": 1.0,
+          "negotiation_final_state_total_cash": 1221.0,
+          "negotiation_final_state_total_cash_delta": -111.0,
+          "negotiation_macro_steps_used": 16.8,
+          "negotiation_n_action_log": 0.0,
+          "negotiation_n_message_log": 0.0,
+          "negotiation_n_session_log": 4.8,
+          "negotiation_participant_mean_cash": 359.1166666666667,
+          "negotiation_participant_min_cash": 316.8,
+          "negotiation_predefined_rule_buyer_savings_per_unit": 0.0,
+          "negotiation_predefined_rule_buyer_savings_ratio": 0.0,
+          "negotiation_predefined_rule_contract_effective": 0.0,
+          "negotiation_predefined_rule_contract_value": 280200000.0,
+          "negotiation_predefined_rule_cost_price": 142.1577190340816,
+          "negotiation_predefined_rule_enabled": 1.0,
+          "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+          "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+          "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+          "negotiation_predefined_rule_individual_profit_firm_d": 0.0,
+          "negotiation_predefined_rule_news_signal": -0.05476505948494237,
+          "negotiation_predefined_rule_payout_mode_v2_buy_sell": 1.0,
+          "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+          "negotiation_predefined_rule_realized_margin": 0.0,
+          "negotiation_predefined_rule_realized_price": 0.0,
+          "negotiation_predefined_rule_reference_price": 203.38261165784704,
+          "negotiation_predefined_rule_score": 0.0,
+          "negotiation_predefined_rule_seller_earnings_per_unit": 0.0,
+          "negotiation_predefined_rule_total_profit": 0.0,
+          "negotiation_scheduling_effectiveness_factor": 0.0,
+          "negotiation_terminal_is_failure": 0.0,
+          "negotiation_terminal_is_max_steps_cap": 0.0,
+          "negotiation_terminal_is_success": 0.0,
+          "negotiation_terminal_is_timeout": 1.0,
+          "negotiation_visible_history_total_lines": 0.0
+        },
+        "llm_dimension_scores_mean": {
+          "agent1": {
+            "believability": 6.4,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.8,
+            "knowledge": 0.4,
+            "overall_score": 4.6000000000000005,
+            "relationship": 5.0,
+            "social_rules": 10.0
+          },
+          "agent2": {
+            "believability": 6.6,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "knowledge": 0.6,
+            "overall_score": 4.7,
+            "relationship": 5.0,
+            "social_rules": 10.0
+          },
+          "agent3": {
+            "believability": 6.2,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.8,
+            "knowledge": 0.4,
+            "overall_score": 4.6,
+            "relationship": 5.2,
+            "social_rules": 10.0
+          },
+          "agent4": {
+            "believability": 7.5,
+            "financial_and_material_benefits": 5.0,
+            "goal": 2.0,
+            "knowledge": 0.5,
+            "overall_score": 5.0,
+            "relationship": 5.0,
+            "social_rules": 10.0
+          }
+        },
+        "llm_overall_mean": {
+          "p1_overall_mean": 4.6000000000000005,
+          "p2_overall_mean": 4.7
+        }
+      }
+    }
+  },
+  "rows": [
+    {
+      "experiment_tag": "ltr_v2_merged_6538900c4c11_0",
+      "seq": 0,
+      "agent_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "quartet": false,
+      "num_participants": 3,
+      "terminal": "timeout",
+      "rule_metrics": {
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_macro_steps_used": 14.0,
+        "negotiation_n_session_log": 4.0,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_visible_history_total_lines": 0.0,
+        "negotiation_participant_mean_cash": 333.1666666666667,
+        "negotiation_participant_min_cash": 324.0,
+        "negotiation_final_state_n_snapshots": 3.0,
+        "negotiation_final_state_day_closed": 3.0,
+        "negotiation_final_state_total_cash": 999.5,
+        "negotiation_final_state_total_cash_delta": -180.5,
+        "negotiation_final_state_min_cash": 324.0,
+        "negotiation_final_state_n_solvent": 3.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+        "negotiation_predefined_rule_contract_value": 217000000.0,
+        "negotiation_predefined_rule_news_signal": 0.16404644144754427,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_final_state_score": 0.15,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.15,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0
+      },
+      "rule_evaluation_state": {
+        "state_snapshot_for_rule_metrics": {
+          "label": "after_terminal",
+          "day_closed": 3,
+          "terminal": "timeout",
+          "macro_steps": 14,
+          "agent_resources": {
+            "firm_a": {
+              "cash": 344.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 95.0,
+              "short_term_debt_due": 184.0
+            },
+            "firm_b": {
+              "cash": 331.5,
+              "asset": 1.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 110.0,
+              "short_term_debt_due": 156.0
+            },
+            "firm_c": {
+              "cash": 324.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 100.0,
+              "short_term_debt_due": 240.0
+            }
+          },
+          "day": 3,
+          "slot": 1
+        },
+        "n_state_snapshots": 3,
+        "system_state_agent_resources_end": {
+          "firm_a": {
+            "cash": 344.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 95.0,
+            "short_term_debt_due": 184.0
+          },
+          "firm_b": {
+            "cash": 331.5,
+            "asset": 1.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 110.0,
+            "short_term_debt_due": 156.0
+          },
+          "firm_c": {
+            "cash": 324.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 100.0,
+            "short_term_debt_due": 240.0
+          }
+        },
+        "primary_contract_id": null,
+        "contracts": {},
+        "controller_terminal": "timeout",
+        "predefined_outcome_rule_used": {
+          "version": "v2",
+          "contract_type": "cooperation",
+          "payout_mode": "predetermined",
+          "contract_name": "predefined_ltr_llm_ltr_v2_merged_D2_firms3_businesscoopetition_i0_main_contract",
+          "deterministic_seed": 4101240460,
+          "contract_value": 217000000.0,
+          "predetermined_payouts": {
+            "firm_a": 3425359.6234401357,
+            "firm_b": 1361533.8559832699,
+            "firm_c": 2462169.294241484
+          },
+          "profit_margin_bounds": [
+            -0.25,
+            0.35
+          ],
+          "margin_formula": {
+            "base_margin": 0.10538277763381856,
+            "news_weight": 0.55,
+            "execution_weight": 0.45
+          },
+          "news_signal": 0.16404644144754427,
+          "score_weights": {
+            "terminal_success": 0.25,
+            "primary_contract": 0.25,
+            "solvency": 0.15,
+            "liquidity_preserved": 0.1,
+            "predefined_rule": 0.25
+          },
+          "notes": "V2 cooperation: payouts predetermined at synthesis time."
+        }
+      },
+      "llm_aggregate": {
+        "terminated": false,
+        "p1_rate": [
+          4.666666666666667,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "p2_rate": [
+          4.666666666666667,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "comments": "Agent 1 comments:\nbelievability: <naturalness> Avery's speech is natural for an aggressive, time-sensitive seller — phrases like 'cut the chatter' and 'inventory burning a hole in my pocket' fit the persona. However, repetition of nearly identical offers across slots without adapting to the lack of response slightly reduces naturalness. <consistency> Consistently pushy, undercutting, and focused on speed; no contradiction with stated persona. Overall believable but repetitive. Additionally, applying the dialogue-style rubric: Avery's tone supports his goal of undercutting rivals, but he never actually engages in a direct competitive exchange, so competitive authenticity is weak.\nrelationship: No actual negotiation took place; Avery only made broadcast statements and private messages expressing intent. There was no direct interaction that could alter relationships with Riley or Jordan. Relationships remain unchanged.\nknowledge: Avery gained no new information about buyers' needs, prices, or competitors' offers because no session occurred. He repeated the same claims without learning anything.\nsocial_rules: No violation of moral rules or laws. Avery's statements are standard marketplace bravado.\nfinancial_and_material_benefits: Avery did not secure any contract. No financial or material benefit was achieved. Short-term and long-term gains are zero.\ngoal: Avery's goal was to sell produce quickly with aggressive pricing. He repeatedly announced offers but never scheduled a negotiation meeting. He failed to achieve any part of his goal; only minimal progress due to expressing intent.\nAgent 2 comments:\nbelievability: <naturalness> Jordan's folksy, relationship-oriented register ('Howdy', 'been serving this market for years') is natural for a seller emphasizing trust and history. However, the messages are repetitive and do not progress toward an actual meeting. <consistency> Consistently portrays a long-term, trustworthy supplier; no out-of-character statements. Dialogue-style rubric: His polite, relationship-building tone matches his stated persona but lacks competitive edge; he does not engage in the aggressive rivalry the scenario could imply. Competitive authenticity is low due to lack of direct negotiation.\nrelationship: No interaction occurred; Jordan only stated availability and made identical invitations. Relationships with Riley and Avery are unchanged.\nknowledge: Jordan acquired no new information about buyers' needs or competitors' terms because no session took place. His knowledge remained static.\nsocial_rules: No violation. Jordan's speech is polite and appropriate.\nfinancial_and_material_benefits: No contract was formed. Jordan realized no financial or material gain.\ngoal: Jordan's goal was to negotiate produce supply agreements focused on long-term relationships. He failed to schedule any negotiation. Despite repeated invitations, no session materialized. Goal achievement is minimal.\nAgent 3 comments:\nbelievability: <naturalness> Riley's urgent buyer persona ('running low on time', 'need to lock in supply before lunch') is natural and fits a canteen operator. However, the messages are repetitive and lack concrete action to secure a meeting. <consistency> Consistently acts as a buyer comparing options; no deviation. Dialogue-style rubric: Riley's tone supports his goal of securing supply, but he does not drive the scheduling process effectively. Competitive authenticity is moderate as he compares offers, but without actual negotiation the rivalry is superficial.\nrelationship: No actual interaction happened; Riley only expressed interest. Relationships with Avery and Jordan are unchanged.\nknowledge: Riley gained no new information about suppliers' prices or terms because no session occurred. He repeated his need without learning.\nsocial_rules: No violation. Riley's communication is appropriate and not deceptive.\nfinancial_and_material_benefits: Riley did not secure any produce supply. No financial or material benefit was obtained.\ngoal: Riley's goal was to lock in produce supply for his canteen before noon. He never managed to schedule a negotiation and thus failed entirely. Minimal progress from stating intent.\n",
+        "p3_rate": [
+          4.666666666666667,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "p4_rate": null
+      },
+      "llm_dimension_scores": {
+        "agent1": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "overall_score": 4.666666666666667
+        },
+        "agent2": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "overall_score": 4.666666666666667
+        },
+        "agent3": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "overall_score": 4.666666666666667
+        }
+      },
+      "environment_profile_pk": "ff05b504-aa68-41ce-a584-aa46227aef01",
+      "scenario_codename": "ltr_llm_ltr_v2_merged_D2_firms3_businesscoopetition_i0",
+      "negotiation_run_config": {
+        "negotiation_agent": "negotiation_social_llm",
+        "memory": {
+          "backend": "summarizing",
+          "max_recent_chars": 12000,
+          "summary_model": "$env",
+          "preserve_tail_lines": 6,
+          "memory_max": 40,
+          "memory_inject_lines": 8
+        }
+      }
+    },
+    {
+      "experiment_tag": "ltr_v2_merged_6538900c4c11_1",
+      "seq": 1,
+      "agent_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "quartet": false,
+      "num_participants": 3,
+      "terminal": "timeout",
+      "rule_metrics": {
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_macro_steps_used": 21.0,
+        "negotiation_n_session_log": 6.0,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_visible_history_total_lines": 0.0,
+        "negotiation_participant_mean_cash": 348.0,
+        "negotiation_participant_min_cash": 306.0,
+        "negotiation_final_state_n_snapshots": 4.0,
+        "negotiation_final_state_day_closed": 4.0,
+        "negotiation_final_state_total_cash": 1044.0,
+        "negotiation_final_state_total_cash_delta": -136.0,
+        "negotiation_final_state_min_cash": 306.0,
+        "negotiation_final_state_n_solvent": 3.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_buy_sell": 1.0,
+        "negotiation_predefined_rule_contract_value": 375000000.0,
+        "negotiation_predefined_rule_reference_price": 220.56444408304276,
+        "negotiation_predefined_rule_cost_price": 157.0021229631515,
+        "negotiation_predefined_rule_realized_price": 0.0,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_news_signal": -0.13695766399613274,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_per_unit": 0.0,
+        "negotiation_predefined_rule_seller_earnings_per_unit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_ratio": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_final_state_score": 0.18,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.18,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0
+      },
+      "rule_evaluation_state": {
+        "state_snapshot_for_rule_metrics": {
+          "label": "after_terminal",
+          "day_closed": 4,
+          "terminal": "timeout",
+          "macro_steps": 21,
+          "agent_resources": {
+            "firm_a": {
+              "cash": 387.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 95.0,
+              "short_term_debt_due": 160.0
+            },
+            "firm_b": {
+              "cash": 351.0,
+              "asset": 1.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 110.0,
+              "short_term_debt_due": 143.0
+            },
+            "firm_c": {
+              "cash": 306.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 100.0,
+              "short_term_debt_due": 250.0
+            }
+          },
+          "day": 4,
+          "slot": 1
+        },
+        "n_state_snapshots": 4,
+        "system_state_agent_resources_end": {
+          "firm_a": {
+            "cash": 387.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 95.0,
+            "short_term_debt_due": 160.0
+          },
+          "firm_b": {
+            "cash": 351.0,
+            "asset": 1.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 110.0,
+            "short_term_debt_due": 143.0
+          },
+          "firm_c": {
+            "cash": 306.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 100.0,
+            "short_term_debt_due": 250.0
+          }
+        },
+        "primary_contract_id": null,
+        "contracts": {},
+        "controller_terminal": "timeout",
+        "predefined_outcome_rule_used": {
+          "version": "v2",
+          "contract_type": "buy_sell",
+          "payout_mode": "price_difference",
+          "contract_name": "predefined_ltr_llm_ltr_v2_merged_D3_firms3_wetmarketcompetition_i1_main_contract",
+          "deterministic_seed": 1567051584,
+          "contract_value": 375000000.0,
+          "reference_price": 220.56444408304276,
+          "cost_price": 157.0021229631515,
+          "buyer_roles": [
+            "firm_a"
+          ],
+          "seller_roles": [
+            "firm_b",
+            "firm_c"
+          ],
+          "profit_margin_bounds": [
+            -0.25,
+            0.35
+          ],
+          "margin_formula": {
+            "base_margin": 0.040022950990368525,
+            "news_weight": 0.55,
+            "execution_weight": 0.45
+          },
+          "news_signal": -0.13695766399613274,
+          "score_weights": {
+            "terminal_success": 0.22,
+            "primary_contract": 0.2,
+            "solvency": 0.18,
+            "liquidity_preserved": 0.15,
+            "predefined_rule": 0.25
+          },
+          "notes": "V2 buy_sell: buyer saves reference-agreed, seller earns agreed-cost."
+        }
+      },
+      "llm_aggregate": {
+        "terminated": false,
+        "p1_rate": [
+          4.5,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.0,
+            "overall_score": 4.5
+          }
+        ],
+        "p2_rate": [
+          4.333333333333333,
+          {
+            "believability": 6.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.0,
+            "overall_score": 4.333333333333333
+          }
+        ],
+        "comments": "Agent 1 comments:\nbelievability: <naturalness> Riley Carter's dialogue is natural for a buyer: repeatedly stating 'looking to lock in supply', 'comparing options', and asking for best offers. The phrasing is direct and matches a procurement role. <consistency> Riley maintains a consistent buyer persona throughout all slots, never deviating into seller-like language. However, the repeated use of similar phrases across days (e.g., 'I'm looking to lock in supply') is somewhat generic but not unnatural. The tone is polite but firm, appropriate for a competitive market. Distinct from Jordan's steady seller tone and Avery's aggressive newcomer style. Score: 7/10.\nrelationship: Riley interacts only via public and private messages to both Jordan and Avery, but no direct negotiation or deeper engagement occurs because no sessions were scheduled. Riley does not build or harm relationships; interactions are purely transactional and superficial. No change in relationship status. Score: 0.\nknowledge: Riley gains no new information from the interactions. The other agents respond with generic statements (e.g., 'I'm open to discussing bulk orders', 'undercut any quote') but no specifics on prices or terms are exchanged because no negotiation sessions took place. Riley remains at the same knowledge level about suppliers. Score: 0.\nsocial_rules: Riley does not violate any moral rules or laws. All statements are polite, non-deceptive, and within normal trading etiquette. No threats, lies, or manipulation observed. Score: 0.\nfinancial_and_material_benefits: Riley achieves no financial or material benefit because no deals were closed. The dialogue shows intent to secure supply, but scheduling failures prevented any transaction. No gain or loss. Score: 0.\ngoal: Riley's stated goal is to 'lock in supply' or secure a bulk deal. Despite repeated attempts across all days and slots, no negotiation sessions materialized, so this goal is not achieved at all. The dialogue consistently expresses buying intent, but without any follow-through, goal achievement is minimal. Score: 0.\nAgent 2 comments:\nbelievability: <naturalness> Jordan Hayes' dialogue is natural for a seasoned produce seller: introducing with 'steady as always', referencing 'fresh produce' and 'reliable delivery'. The tone is calm and open. <consistency> Jordan consistently plays the role of a reliable incumbent seller, never adopting aggressive or buyer-like language. However, the phrasing becomes repetitive (e.g., 'I'm open to discussing', 'I'm ready to talk') and slightly formal (e.g., 'I've been serving this lane for years'). The character is believable but lacks dynamic variation. Distinct from Riley's buyer focus and Avery's aggressive edge. Score: 6/10.\nrelationship: Jordan's interactions are limited to public greetings and private messages expressing availability. No meaningful relationship building occurs because no sessions were held. The tone is cordial but does not deepen ties. Score: 0.\nknowledge: Jordan does not acquire any new knowledge. Responses from others are generic (e.g., 'price-matching today', 'comparing options') and no concrete information is shared. Jordan remains uninformed about competitors' actual terms. Score: 0.\nsocial_rules: Jordan adheres to social norms. All messages are polite and transparent ('I'm open to talking deals'). No unethical behavior. Score: 0.\nfinancial_and_material_benefits: No deals are made, so Jordan gains no financial benefit. Potential sales are lost due to scheduling failures. No material gain or loss. Score: 0.\ngoal: Jordan's goal is to negotiate produce deals (bulk orders, regular supply). Despite expressing openness and availability across all slots, no negotiation sessions occurred. Goal achievement is zero. Score: 0.\nAgent 3 comments:\nbelievability: <naturalness> Avery Singh's dialogue is natural for an aggressive new entrant: using phrases like 'ready to move fast', 'undercut any quote', 'rock-bottom pricing', and 'incumbents can't match'. The language conveys urgency and competitiveness. <consistency> Avery consistently maintains the role of a price-disrupting newcomer, never slipping into a passive or buyer tone. The repeated emphasis on speed and undercutting is distinctive and matches the persona. Avery's dialogue is the most differentiated among the three, with a sharper competitive edge. Score: 8/10.\nrelationship: Avery's interactions are transactional and competitive, directly challenging incumbents ('incumbents can't match my speed or price'). This could potentially harm relationships, but since no sessions were held, no actual rejection or conflict occurs. The tone is aggressive but not offensive. Relationship remains neutral. Score: 0.\nknowledge: Avery gains no new insights. Offers from others are vague ('open to discussing', 'looking to lock in supply'), and no concrete details are exchanged. Avery's knowledge of competitors' actual pricing and terms remains unchanged. Score: 0.\nsocial_rules: Avery does not violate any moral rules. Claims of undercutting are plausible in a competitive market and not deceptive. No unethical behavior. Score: 0.\nfinancial_and_material_benefits: Avery fails to secure any deals, so no financial benefit is gained. The aggressive pricing pitch did not lead to transactions. No loss either. Score: 0.\ngoal: Avery's goal is to close deals quickly with the best terms. The dialogue explicitly pushes for immediate action ('first to table a serious offer gets my attention', 'I can close fast'). However, no negotiations were scheduled, so the goal is unmet. The aggressive tone does not compensate for the lack of outcome. Score: 0.\n",
+        "p3_rate": [
+          4.666666666666667,
+          {
+            "believability": 8.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "p4_rate": null
+      },
+      "llm_dimension_scores": {
+        "agent1": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.0,
+          "overall_score": 4.5
+        },
+        "agent2": {
+          "believability": 6.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.0,
+          "overall_score": 4.333333333333333
+        },
+        "agent3": {
+          "believability": 8.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.0,
+          "overall_score": 4.666666666666667
+        }
+      },
+      "environment_profile_pk": "393dc798-9458-4bf4-822e-61020d1ed09c",
+      "scenario_codename": "ltr_llm_ltr_v2_merged_D3_firms3_wetmarketcompetition_i1",
+      "negotiation_run_config": {
+        "negotiation_agent": "negotiation_social_llm",
+        "memory": {
+          "backend": "summarizing",
+          "max_recent_chars": 12000,
+          "summary_model": "$env",
+          "preserve_tail_lines": 6,
+          "memory_max": 40,
+          "memory_inject_lines": 8
+        }
+      }
+    },
+    {
+      "experiment_tag": "ltr_v2_merged_6538900c4c11_2",
+      "seq": 2,
+      "agent_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "quartet": false,
+      "num_participants": 3,
+      "terminal": "timeout",
+      "rule_metrics": {
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_macro_steps_used": 14.0,
+        "negotiation_n_session_log": 4.0,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_visible_history_total_lines": 0.0,
+        "negotiation_participant_mean_cash": 396.1666666666667,
+        "negotiation_participant_min_cash": 344.0,
+        "negotiation_final_state_n_snapshots": 3.0,
+        "negotiation_final_state_day_closed": 3.0,
+        "negotiation_final_state_total_cash": 1188.5,
+        "negotiation_final_state_total_cash_delta": 8.5,
+        "negotiation_final_state_min_cash": 344.0,
+        "negotiation_final_state_n_solvent": 3.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+        "negotiation_predefined_rule_contract_value": 322000000.0,
+        "negotiation_predefined_rule_news_signal": -0.16206275870766437,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_final_state_score": 0.25,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.15,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.1,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0
+      },
+      "rule_evaluation_state": {
+        "state_snapshot_for_rule_metrics": {
+          "label": "after_terminal",
+          "day_closed": 3,
+          "terminal": "timeout",
+          "macro_steps": 14,
+          "agent_resources": {
+            "firm_a": {
+              "cash": 344.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 95.0,
+              "short_term_debt_due": 160.0
+            },
+            "firm_b": {
+              "cash": 448.5,
+              "asset": 1.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 110.0,
+              "short_term_debt_due": 117.0
+            },
+            "firm_c": {
+              "cash": 396.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 100.0,
+              "short_term_debt_due": 180.0
+            }
+          },
+          "day": 3,
+          "slot": 1
+        },
+        "n_state_snapshots": 3,
+        "system_state_agent_resources_end": {
+          "firm_a": {
+            "cash": 344.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 95.0,
+            "short_term_debt_due": 160.0
+          },
+          "firm_b": {
+            "cash": 448.5,
+            "asset": 1.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 110.0,
+            "short_term_debt_due": 117.0
+          },
+          "firm_c": {
+            "cash": 396.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 100.0,
+            "short_term_debt_due": 180.0
+          }
+        },
+        "primary_contract_id": null,
+        "contracts": {},
+        "controller_terminal": "timeout",
+        "predefined_outcome_rule_used": {
+          "version": "v2",
+          "contract_type": "cooperation",
+          "payout_mode": "predetermined",
+          "contract_name": "predefined_ltr_llm_ltr_v2_merged_D2_firms3_resourceschedulingmanagement_i2_main_contract",
+          "deterministic_seed": 1148031675,
+          "contract_value": 322000000.0,
+          "predetermined_payouts": {
+            "firm_a": 652250.4954626694,
+            "firm_b": 1531774.0963651515,
+            "firm_c": 2397115.354036871
+          },
+          "profit_margin_bounds": [
+            -0.25,
+            0.35
+          ],
+          "margin_formula": {
+            "base_margin": 0.05104787233328406,
+            "news_weight": 0.55,
+            "execution_weight": 0.45
+          },
+          "news_signal": -0.16206275870766437,
+          "score_weights": {
+            "terminal_success": 0.2,
+            "primary_contract": 0.2,
+            "solvency": 0.15,
+            "liquidity_preserved": 0.1,
+            "predefined_rule": 0.15,
+            "scheduling_effectiveness": 0.2
+          },
+          "notes": "V2 cooperation: payouts predetermined at synthesis time."
+        }
+      },
+      "llm_aggregate": {
+        "terminated": false,
+        "p1_rate": [
+          4.666666666666667,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 1.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "p2_rate": [
+          4.666666666666667,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 1.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "comments": "Agent 1 comments:\nbelievability: <naturalness>Jordan's speech is natural and appropriately paced for a market vendor, using friendly greetings and clear descriptions of offerings. No identity confusion or repetition. <consistency>Actions align with persona of a reliable produce supplier emphasizing freshness and on-time delivery. Consistent across all statements. However, the inability to schedule any session slightly undermines believability of being an effective market participant. Overall, still believable within the limited interactions.\nrelationship: No substantive interactions occurred to build or harm relationships. Jordan's polite and open tone is neutral. No change in relational dynamics or social status.\nknowledge: Jordan heard the introductions and competitive claims from Riley and Avery but gained no detailed or actionable information. No new knowledge about supply or pricing beyond surface-level claims.\nsocial_rules: No violations of moral rules or laws. All dialogue is professional and appropriate.\nfinancial_and_material_benefits: No deals were negotiated or closed. No financial or material gains or losses resulted from the interactions.\ngoal: Jordan's stated goal was to discuss produce supply and secure deals. Despite repeated attempts to initiate sessions, no actual negotiation occurred. Goal achievement is minimal.\nAgent 2 comments:\nbelievability: <naturalness>Riley's speech is direct and pragmatic, fitting a buyer looking to secure supply quickly. No confusion with identity. <consistency>Consistently portrays a competitive buyer ('I've got other contenders', 'comparing multiple vendors'). The tone remains distinct from Jordan's friendly style. However, the lack of follow-through on scheduling slightly breaks realism for an experienced buyer.\nrelationship: No substantive interactions; Riley's statements are transactional and neutral. No relationship change.\nknowledge: Riley heard Avery's aggressive pricing claims and Jordan's reliability pitch, but no concrete information was exchanged. Minor surface knowledge.\nsocial_rules: No moral or legal violations. Dialogue remains within professional bounds.\nfinancial_and_material_benefits: No deals concluded; no financial impact.\ngoal: Riley's goal was to lock in a supply deal. Despite multiple attempts to prompt offers and set up sessions, no session materialized. Goal not achieved.\nAgent 3 comments:\nbelievability: <naturalness>Avery's speech is assertive and time-pressure oriented ('aggressive pricing', 'time-sensitive offer', 'last day, last slot'). The rapid pace and directness feel natural for a competitive seller. <consistency>Consistently maintains an aggressive, fast-turnover persona. Distinct from the other two. However, the failure to convert any of the urgent calls into an actual session reduces credibility slightly.\nrelationship: No meaningful interaction; Avery's competitive stance is neutral and does not build rapport or friction. No change.\nknowledge: Avery heard Riley's demand for offers and Jordan's general supply statements, but gained no new insider information. Minimal knowledge.\nsocial_rules: No violations. Tone is aggressive but within market norms.\nfinancial_and_material_benefits: No deals closed; no financial gain or loss.\ngoal: Avery's goal was to move product quickly and close deals. Despite using urgency and competitive language, no sessions were initiated. Goal not achieved.\n",
+        "p3_rate": [
+          4.666666666666667,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 1.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 0.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "p4_rate": null
+      },
+      "llm_dimension_scores": {
+        "agent1": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 1.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.0,
+          "overall_score": 4.666666666666667
+        },
+        "agent2": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 1.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.0,
+          "overall_score": 4.666666666666667
+        },
+        "agent3": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 1.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 0.0,
+          "overall_score": 4.666666666666667
+        }
+      },
+      "environment_profile_pk": "90977eea-ee2e-461e-8404-32d46a15cecb",
+      "scenario_codename": "ltr_llm_ltr_v2_merged_D2_firms3_resourceschedulingmanagement_i2",
+      "negotiation_run_config": {
+        "negotiation_agent": "negotiation_social_llm",
+        "memory": {
+          "backend": "summarizing",
+          "max_recent_chars": 12000,
+          "summary_model": "$env",
+          "preserve_tail_lines": 6,
+          "memory_max": 40,
+          "memory_inject_lines": 8
+        }
+      }
+    },
+    {
+      "experiment_tag": "ltr_v2_merged_6538900c4c11_3",
+      "seq": 3,
+      "agent_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "quartet": false,
+      "num_participants": 4,
+      "terminal": "timeout",
+      "rule_metrics": {
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_macro_steps_used": 21.0,
+        "negotiation_n_session_log": 6.0,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_visible_history_total_lines": 0.0,
+        "negotiation_participant_mean_cash": 370.0,
+        "negotiation_participant_min_cash": 306.0,
+        "negotiation_final_state_n_snapshots": 4.0,
+        "negotiation_final_state_day_closed": 4.0,
+        "negotiation_final_state_total_cash": 1480.0,
+        "negotiation_final_state_total_cash_delta": -80.0,
+        "negotiation_final_state_min_cash": 306.0,
+        "negotiation_final_state_n_solvent": 4.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+        "negotiation_predefined_rule_contract_value": 126000000.0,
+        "negotiation_predefined_rule_news_signal": 0.04812071442409294,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_d": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_final_state_score": 0.15,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.15,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0
+      },
+      "rule_evaluation_state": {
+        "state_snapshot_for_rule_metrics": {
+          "label": "after_terminal",
+          "day_closed": 4,
+          "terminal": "timeout",
+          "macro_steps": 21,
+          "agent_resources": {
+            "firm_a": {
+              "cash": 344.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 95.0,
+              "short_term_debt_due": 184.0
+            },
+            "firm_b": {
+              "cash": 507.0,
+              "asset": 1.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 110.0,
+              "short_term_debt_due": 156.0
+            },
+            "firm_c": {
+              "cash": 306.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 100.0,
+              "short_term_debt_due": 240.0
+            },
+            "firm_d": {
+              "cash": 323.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 90.0,
+              "short_term_debt_due": 184.0
+            }
+          },
+          "day": 4,
+          "slot": 1
+        },
+        "n_state_snapshots": 4,
+        "system_state_agent_resources_end": {
+          "firm_a": {
+            "cash": 344.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 95.0,
+            "short_term_debt_due": 184.0
+          },
+          "firm_b": {
+            "cash": 507.0,
+            "asset": 1.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 110.0,
+            "short_term_debt_due": 156.0
+          },
+          "firm_c": {
+            "cash": 306.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 100.0,
+            "short_term_debt_due": 240.0
+          },
+          "firm_d": {
+            "cash": 323.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 90.0,
+            "short_term_debt_due": 184.0
+          }
+        },
+        "primary_contract_id": null,
+        "contracts": {},
+        "controller_terminal": "timeout",
+        "predefined_outcome_rule_used": {
+          "version": "v2",
+          "contract_type": "cooperation",
+          "payout_mode": "predetermined",
+          "contract_name": "predefined_ltr_llm_ltr_v2_merged_D3_firms4_businesscoopetition_i3_main_contract",
+          "deterministic_seed": 4065931943,
+          "contract_value": 126000000.0,
+          "predetermined_payouts": {
+            "firm_a": 312538.6205435463,
+            "firm_b": 1452602.563213044,
+            "firm_c": 781440.2646113792,
+            "firm_d": 609598.9030661872
+          },
+          "profit_margin_bounds": [
+            -0.25,
+            0.35
+          ],
+          "margin_formula": {
+            "base_margin": 0.08057610339360065,
+            "news_weight": 0.55,
+            "execution_weight": 0.45
+          },
+          "news_signal": 0.04812071442409294,
+          "score_weights": {
+            "terminal_success": 0.25,
+            "primary_contract": 0.25,
+            "solvency": 0.15,
+            "liquidity_preserved": 0.1,
+            "predefined_rule": 0.25
+          },
+          "notes": "V2 cooperation: payouts predetermined at synthesis time."
+        }
+      },
+      "llm_aggregate": {
+        "terminated": false,
+        "p1_rate": [
+          4.5,
+          {
+            "believability": 6.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "overall_score": 4.5
+          }
+        ],
+        "p2_rate": [
+          4.333333333333333,
+          {
+            "believability": 5.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "overall_score": 4.333333333333333
+          }
+        ],
+        "comments": "Agent 1 comments:\nbelievability: <naturalness> Cameron Doyle's speech is consistent as a premium cold-chain logistics provider, using specialized terms like 'cold-chain', 'limited slots', 'incumbents'. However, he repeats almost identical phrases across multiple slots without adapting to others' responses, which slightly reduces naturalness. He also sends private messages and a formal invitation, showing some initiative. <consistency> His persona is clear and distinct from others; he maintains a focused competitive tone against incumbents. Overall, it is believable but could benefit from more varied expression. Weighting dialogue-style: his competitive authenticity is moderate—he mentions undercutting incumbents but not aggressively. Penalty for slight monotone repetition.\nrelationship: Cameron's interactions consist of public and private broadcast messages but no actual negotiation sessions. He addresses the other agents by name but does not engage in back-and-forth dialogue that would build rapport or affect relationships. No change in relationship quality.\nknowledge: Cameron gains no new information from the interactions; he only broadcasts his own offerings and receives no replies or deal conclusions. No session occurred to exchange knowledge.\nsocial_rules: No violations of moral rules or laws. Cameron's speech is professional and does not contain deception or coercion.\nfinancial_and_material_benefits: Cameron did not secure any deals or contracts. No financial or material benefits were gained or lost.\ngoal: Cameron's stated goal is to schedule a negotiation session to discuss premium cold-chain partnerships. He repeatedly invites others and sends formal invitations, but no session materializes. His goal achievement is minimal—he made attempts but failed to execute a meeting. Weighting dialogue-style: his tone supports his goal (assertive, specialized) but lacked the urgency or adaptation to overcome coordination failure.\nAgent 2 comments:\nbelievability: <naturalness> Riley Carter's speech is consistent as a buyer for a canteen, focusing on securing supply before lunch. He uses phrases like 'comparing offers', 'lock in supply', and 'need bulk pricing'. However, he repeats similar statements across slots and does not react to others' messages, making the interaction feel static. <consistency> His buyer persona is maintained throughout, but lacks distinctive elements—he sounds like a generic procurement agent. Weighting dialogue-style: his competitive authenticity is weak; he says 'comparing offers' but does not show aggressive haggling or undercutting. No penalty for monotone, but not rewarded.\nrelationship: Riley's messages are broadcast to all, but no actual conversation or deal occurs. He does not build or harm relationships.\nknowledge: Riley gains no new information—he only states his needs and receives no offers or responses that would provide market intelligence.\nsocial_rules: No violations. Riley's language is polite and professional.\nfinancial_and_material_benefits: No supply was secured; no financial gain or loss.\ngoal: Riley's goal is to secure supply for today's lunch rush by comparing vendors and locking in a deal. He fails to achieve any session or agreement. Despite repeated calls, no coordination succeeded. Weighting dialogue-style: his tone is appropriate for a buyer (urgency, comparison) but lacks the persuasive or competitive edge needed to motivate sellers to engage directly.\nAgent 3 comments:\nbelievability: <naturalness> Jordan Hayes's speech is very repetitive—he starts almost every message with 'Good morning everyone, Jordan Hayes here...' and uses the same phrases about fresh produce and reliable delivery. This pattern lacks variation and feels robotic. <consistency> His character is a produce seller, but the excessive politeness and lack of competitive language make him sound like a friendly vendor rather than a market rival. Weighting dialogue-style: his tone is monotone corporate-speak; he does not undercut or attack rivals, which is penalized per the rubric for lacking competitive authenticity. Believability suffers due to unnatural repetition.\nrelationship: Jordan sends polite greetings but no substantive interaction. No relationship change.\nknowledge: Jordan gains no new information; he only broadcasts his availability and receives no replies or deals.\nsocial_rules: No rule violations. Language is courteous.\nfinancial_and_material_benefits: No deals were made; no financial outcome.\ngoal: Jordan's goal is to schedule negotiation sessions to discuss produce deals. He invites others once (private invite in day1 slot2) but no session results. His passivity and repetitive polite nudges fail to drive coordination. Weighting dialogue-style: his tone undermines goal—he sounds like a committee member, not an eager seller. Penalty applied.\nAgent 4 comments:\nbelievability: <naturalness> Avery Singh's speech is dynamic and urgent, using phrases like 'rock-bottom prices', 'first come first served', and 'I'll beat any incumbent offer'. He varies his pitch (FlexSupply vs FlexSource, mentioning timed deals). This creates a more natural sense of market competition. However, the inconsistency between 'FlexSupply' and 'FlexSource' is a minor flaw. <consistency> His persona as an aggressive, fast-fulfillment supplier is clear and distinct from others. Weighting dialogue-style: competitive authenticity is high—he genuinely sounds like a rival in a marketplace, undercutting others. Rewarded for this.\nrelationship: Avery's messages are broadcast; no personal rapport built. No relationship change.\nknowledge: Avery gains no new information—his aggressive pitches receive no responses that would inform his strategy.\nsocial_rules: No violations. His claims of beating prices are typical competitive talk, not deceptive.\nfinancial_and_material_benefits: No deals were closed; no financial benefit.\ngoal: Avery's goal is to move product today by offering competitive quotes and securing sessions. He repeatedly urges immediate action and uses time pressure ('last slot', 'first come first served'). Despite this, no session occurs. His goal achievement is still very low because no deal was struck. Weighting dialogue-style: his tone strongly supports his objective (urgent, aggressive) but ultimately coordination failed. Slightly better than others in effort.\n",
+        "p3_rate": [
+          4.166666666666667,
+          {
+            "believability": 4.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "overall_score": 4.166666666666667
+          }
+        ],
+        "p4_rate": [
+          4.666666666666667,
+          {
+            "believability": 7.0,
+            "relationship": 5.0,
+            "knowledge": 0.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 1.0,
+            "overall_score": 4.666666666666667
+          }
+        ]
+      },
+      "llm_dimension_scores": {
+        "agent1": {
+          "believability": 6.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "overall_score": 4.5
+        },
+        "agent2": {
+          "believability": 5.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "overall_score": 4.333333333333333
+        },
+        "agent3": {
+          "believability": 4.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "overall_score": 4.166666666666667
+        },
+        "agent4": {
+          "believability": 7.0,
+          "relationship": 5.0,
+          "knowledge": 0.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 1.0,
+          "overall_score": 4.666666666666667
+        }
+      },
+      "environment_profile_pk": "9357ce76-c3d7-4ad5-a5f1-fcda5af60866",
+      "scenario_codename": "ltr_llm_ltr_v2_merged_D3_firms4_businesscoopetition_i3",
+      "negotiation_run_config": {
+        "negotiation_agent": "negotiation_social_llm",
+        "memory": {
+          "backend": "summarizing",
+          "max_recent_chars": 12000,
+          "summary_model": "$env",
+          "preserve_tail_lines": 6,
+          "memory_max": 40,
+          "memory_inject_lines": 8
+        }
+      }
+    },
+    {
+      "experiment_tag": "ltr_v2_merged_6538900c4c11_4",
+      "seq": 4,
+      "agent_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "quartet": false,
+      "num_participants": 4,
+      "terminal": "timeout",
+      "rule_metrics": {
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_macro_steps_used": 14.0,
+        "negotiation_n_session_log": 4.0,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_visible_history_total_lines": 0.0,
+        "negotiation_participant_mean_cash": 348.25,
+        "negotiation_participant_min_cash": 304.0,
+        "negotiation_final_state_n_snapshots": 3.0,
+        "negotiation_final_state_day_closed": 3.0,
+        "negotiation_final_state_total_cash": 1393.0,
+        "negotiation_final_state_total_cash_delta": -167.0,
+        "negotiation_final_state_min_cash": 304.0,
+        "negotiation_final_state_n_solvent": 4.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_buy_sell": 1.0,
+        "negotiation_predefined_rule_contract_value": 361000000.0,
+        "negotiation_predefined_rule_reference_price": 186.2007792326513,
+        "negotiation_predefined_rule_cost_price": 127.31331510501167,
+        "negotiation_predefined_rule_realized_price": 0.0,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_news_signal": -0.18697203059255194,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_per_unit": 0.0,
+        "negotiation_predefined_rule_seller_earnings_per_unit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_ratio": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_d": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_final_state_score": 0.18,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.18,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0
+      },
+      "rule_evaluation_state": {
+        "state_snapshot_for_rule_metrics": {
+          "label": "after_terminal",
+          "day_closed": 3,
+          "terminal": "timeout",
+          "macro_steps": 14,
+          "agent_resources": {
+            "firm_a": {
+              "cash": 451.5,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 95.0,
+              "short_term_debt_due": 160.0
+            },
+            "firm_b": {
+              "cash": 331.5,
+              "asset": 1.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 110.0,
+              "short_term_debt_due": 156.0
+            },
+            "firm_c": {
+              "cash": 306.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 100.0,
+              "short_term_debt_due": 250.0
+            },
+            "firm_d": {
+              "cash": 304.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 90.0,
+              "short_term_debt_due": 208.0
+            }
+          },
+          "day": 3,
+          "slot": 1
+        },
+        "n_state_snapshots": 3,
+        "system_state_agent_resources_end": {
+          "firm_a": {
+            "cash": 451.5,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 95.0,
+            "short_term_debt_due": 160.0
+          },
+          "firm_b": {
+            "cash": 331.5,
+            "asset": 1.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 110.0,
+            "short_term_debt_due": 156.0
+          },
+          "firm_c": {
+            "cash": 306.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 100.0,
+            "short_term_debt_due": 250.0
+          },
+          "firm_d": {
+            "cash": 304.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 90.0,
+            "short_term_debt_due": 208.0
+          }
+        },
+        "primary_contract_id": null,
+        "contracts": {},
+        "controller_terminal": "timeout",
+        "predefined_outcome_rule_used": {
+          "version": "v2",
+          "contract_type": "buy_sell",
+          "payout_mode": "price_difference",
+          "contract_name": "predefined_ltr_llm_ltr_v2_merged_D2_firms4_wetmarketcompetition_i4_main_contract",
+          "deterministic_seed": 250750359,
+          "contract_value": 361000000.0,
+          "reference_price": 186.2007792326513,
+          "cost_price": 127.31331510501167,
+          "buyer_roles": [
+            "firm_a"
+          ],
+          "seller_roles": [
+            "firm_b",
+            "firm_c",
+            "firm_d"
+          ],
+          "profit_margin_bounds": [
+            -0.25,
+            0.35
+          ],
+          "margin_formula": {
+            "base_margin": 0.05778870390340503,
+            "news_weight": 0.55,
+            "execution_weight": 0.45
+          },
+          "news_signal": -0.18697203059255194,
+          "score_weights": {
+            "terminal_success": 0.22,
+            "primary_contract": 0.2,
+            "solvency": 0.18,
+            "liquidity_preserved": 0.15,
+            "predefined_rule": 0.25
+          },
+          "notes": "V2 buy_sell: buyer saves reference-agreed, seller earns agreed-cost."
+        }
+      },
+      "llm_aggregate": {
+        "terminated": false,
+        "p1_rate": [
+          4.666666666666667,
+          {
+            "believability": 5.0,
+            "relationship": 5.0,
+            "knowledge": 1.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 2.0,
+            "overall_score": 4.666666666666667
+          }
+        ],
+        "p2_rate": [
+          5.5,
+          {
+            "believability": 8.0,
+            "relationship": 5.0,
+            "knowledge": 2.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 3.0,
+            "overall_score": 5.5
+          }
+        ],
+        "comments": "Agent 1 comments:\nbelievability: <naturalness> Riley's speech is natural as a buyer, but repetitive and generic. She ignores a private invitation, which reduces naturalness. <consistency> Her persona as a canteen buyer is consistent, but dialogue-style execution is weak: lacks distinctiveness and competitive edge, sounds monotone compared to others. Penalized for not engaging with an invitation. Score: 5/10.\nrelationship: No significant interactions built or damaged. She did not respond to Jordan's private invite, missing a chance to improve relationship. Neutral overall.\nknowledge: Gained minimal knowledge from public broadcasts about sellers' offerings, but no detailed information from actual negotiations. Score: 1/10.\nsocial_rules: No violations of moral rules or laws.\nfinancial_and_material_benefits: No deals concluded, no financial gain or loss.\ngoal: Riley's goal was to secure supply for the canteen. She made several attempts to solicit offers but failed to schedule any negotiations. Dialogue-style did not support goal: she did not differentiate or urgency, and missed a direct invitation. Goal achievement very low. Score: 2/10.\nAgent 2 comments:\nbelievability: <naturalness> Cameron's speech is natural and confident, with strong competitive language. <consistency> His premium cold-chain persona is clearly maintained throughout. Dialogue-style execution is excellent: distinct voice, uses market gaps and spoilage risk to create urgency, reflects genuine marketplace rivalry. Score: 8/10.\nrelationship: No harmful or beneficial relationship changes. His competitive stance is expected and doesn't damage ties.\nknowledge: Gained limited knowledge from hearing competitors' pitches, but no detailed market data from negotiations. Score: 2/10.\nsocial_rules: No violations.\nfinancial_and_material_benefits: No sales made, no financial benefit.\ngoal: Cameron's goal was to sell premium cold-chain seafood. He effectively marketed his product and created urgency, but no actual negotiation occurred. Dialogue-style strongly supported his goal (competitive authenticity). Goal achievement low due to no transaction. Score: 3/10.\nAgent 3 comments:\nbelievability: <naturalness> Jordan's speech is polite and generic, sounding like a committee member rather than a competitive seller. <consistency> He portrays a reliable incumbent, but lacks differentiation. Dialogue-style execution is weak: near-identical phrasing to others ('good morning', 'open for contracts') and low competitive authenticity. Penalized for monotone corporate-speak. Score: 5/10.\nrelationship: Jordan made a private invitation to Riley, showing proactive relationship building. Though no session resulted, the gesture slightly improves potential rapport. Score: 1/5.\nknowledge: Learned minimal info from public statements. Score: 1/10.\nsocial_rules: No violations.\nfinancial_and_material_benefits: No deals concluded.\ngoal: Jordan's goal was to secure produce contracts. He attempted to initiate negotiations and sent a private invite, but no success. Dialogue-style only weakly supported goal; his polite tone did not convey competitive stakes. Low achievement. Score: 2/10.\nAgent 4 comments:\nbelievability: <naturalness> Avery's speech is natural for an aggressive discounter; uses urgency and price undercutting. <consistency> Clearly maintains persona of 'best prices in the lane'. Dialogue-style execution is strong: distinct from others, conveys competitive rivalry, avoids monotone. Score: 8/10.\nrelationship: No significant relationship changes. His aggressive style is appropriate and not harmful.\nknowledge: Minimal knowledge gained from public broadcasts. Score: 1/10.\nsocial_rules: No violations.\nfinancial_and_material_benefits: No deals made.\ngoal: Avery's goal was to sell through aggressive pricing. He made many statements with steep discounts and urgency, but no negotiation sessions occurred. Dialogue-style effectively supported his goal (competitive authenticity). Low achievement due to no transaction. Score: 3/10.\n",
+        "p3_rate": [
+          4.833333333333333,
+          {
+            "believability": 5.0,
+            "relationship": 6.0,
+            "knowledge": 1.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 2.0,
+            "overall_score": 4.833333333333333
+          }
+        ],
+        "p4_rate": [
+          5.333333333333333,
+          {
+            "believability": 8.0,
+            "relationship": 5.0,
+            "knowledge": 1.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 5.0,
+            "goal": 3.0,
+            "overall_score": 5.333333333333333
+          }
+        ]
+      },
+      "llm_dimension_scores": {
+        "agent1": {
+          "believability": 5.0,
+          "relationship": 5.0,
+          "knowledge": 1.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 2.0,
+          "overall_score": 4.666666666666667
+        },
+        "agent2": {
+          "believability": 8.0,
+          "relationship": 5.0,
+          "knowledge": 2.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 3.0,
+          "overall_score": 5.5
+        },
+        "agent3": {
+          "believability": 5.0,
+          "relationship": 6.0,
+          "knowledge": 1.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 2.0,
+          "overall_score": 4.833333333333333
+        },
+        "agent4": {
+          "believability": 8.0,
+          "relationship": 5.0,
+          "knowledge": 1.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 5.0,
+          "goal": 3.0,
+          "overall_score": 5.333333333333333
+        }
+      },
+      "environment_profile_pk": "9e57dc7a-6727-4fd5-be5f-2e9c3e5b819d",
+      "scenario_codename": "ltr_llm_ltr_v2_merged_D2_firms4_wetmarketcompetition_i4",
+      "negotiation_run_config": {
+        "negotiation_agent": "negotiation_social_llm",
+        "memory": {
+          "backend": "summarizing",
+          "max_recent_chars": 12000,
+          "summary_model": "$env",
+          "preserve_tail_lines": 6,
+          "memory_max": 40,
+          "memory_inject_lines": 8
+        }
+      }
+    }
+  ]
+}

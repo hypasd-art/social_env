@@ -1,0 +1,291 @@
+{
+  "schema": "sotopia.long_term_negotiation.per_agent_episode_bundle.v1",
+  "episode_tag": "ltr_live_d8e38aa52923_0",
+  "agent": "firm_b",
+  "execution": {
+    "messenger_inbox_subset": [
+      {
+        "seq": 1,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Episode start."
+      },
+      {
+        "seq": 3,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 5,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #1 phase=Phase.SCHEDULE_INVITE."
+      },
+      {
+        "seq": 8,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 9,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #2 phase=Phase.SCHEDULE_RESPONSE."
+      },
+      {
+        "seq": 10,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #3 phase=Phase.POST_SESSION."
+      },
+      {
+        "seq": 12,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 14,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #4 phase=Phase.SCHEDULE_INVITE."
+      },
+      {
+        "seq": 16,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 18,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #5 phase=Phase.SCHEDULE_RESPONSE."
+      },
+      {
+        "seq": 19,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #6 phase=Phase.POST_SESSION."
+      },
+      {
+        "seq": 20,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #7 phase=Phase.END_OF_DAY."
+      },
+      {
+        "seq": 23,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 24,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #8 phase=Phase.SCHEDULE_INVITE."
+      },
+      {
+        "seq": 25,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 28,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #9 phase=Phase.SCHEDULE_RESPONSE."
+      },
+      {
+        "seq": 29,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #10 phase=Phase.POST_SESSION."
+      },
+      {
+        "seq": 30,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 33,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #11 phase=Phase.SCHEDULE_INVITE."
+      },
+      {
+        "seq": 34,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 37,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #12 phase=Phase.SCHEDULE_RESPONSE."
+      },
+      {
+        "seq": 38,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #13 phase=Phase.POST_SESSION."
+      },
+      {
+        "seq": 39,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #14 phase=Phase.END_OF_DAY."
+      },
+      {
+        "seq": 42,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 43,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #15 phase=Phase.SCHEDULE_INVITE."
+      },
+      {
+        "seq": 44,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 47,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #16 phase=Phase.SCHEDULE_RESPONSE."
+      },
+      {
+        "seq": 48,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #17 phase=Phase.POST_SESSION."
+      },
+      {
+        "seq": 49,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 52,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #18 phase=Phase.SCHEDULE_INVITE."
+      },
+      {
+        "seq": 53,
+        "source": "firm_b",
+        "message_class": "AgentAction",
+        "text": " did nothing"
+      },
+      {
+        "seq": 56,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #19 phase=Phase.SCHEDULE_RESPONSE."
+      },
+      {
+        "seq": 57,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #20 phase=Phase.POST_SESSION."
+      },
+      {
+        "seq": 58,
+        "source": "Environment",
+        "message_class": "SimpleMessage",
+        "text": "[NegotiationWorld] Macro step #21 phase=Phase.END_OF_DAY."
+      }
+    ],
+    "visible_history": [],
+    "action_log": [],
+    "message_log": [],
+    "scheduling_log": [
+      [
+        1,
+        1,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        1,
+        1,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        1,
+        2,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        1,
+        2,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        2,
+        1,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        2,
+        1,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        2,
+        2,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        2,
+        2,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        3,
+        1,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        3,
+        1,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        3,
+        2,
+        "firm_b",
+        " did nothing"
+      ],
+      [
+        3,
+        2,
+        "firm_b",
+        " did nothing"
+      ]
+    ]
+  },
+  "llm_model_traces": []
+}

@@ -664,7 +664,7 @@ def bilateral_timeline_presets_lite() -> list[tuple[str, NegotiationTimelinePara
             NegotiationTimelineParams(
                 D=1,
                 s_max_per_day=2,
-                max_session_rounds=8,
+                max_session_rounds=12,
                 max_total_turns_per_session=32,
             ),
         ),
@@ -678,11 +678,20 @@ def bilateral_timeline_presets_lite() -> list[tuple[str, NegotiationTimelinePara
             ),
         ),
         (
+            "D3",
+            NegotiationTimelineParams(
+                D=3,
+                s_max_per_day=2,
+                max_session_rounds=12,
+                max_total_turns_per_session=32,
+            ),
+        ),
+        (
             "D6",
             NegotiationTimelineParams(
                 D=6,
                 s_max_per_day=2,
-                max_session_rounds=24,
+                max_session_rounds=12,
                 max_total_turns_per_session=32,
             ),
         ),
@@ -691,7 +700,7 @@ def bilateral_timeline_presets_lite() -> list[tuple[str, NegotiationTimelinePara
             NegotiationTimelineParams(
                 D=8,
                 s_max_per_day=2,
-                max_session_rounds=32,
+                max_session_rounds=12,
                 max_total_turns_per_session=32,
             ),
         ),
@@ -699,8 +708,8 @@ def bilateral_timeline_presets_lite() -> list[tuple[str, NegotiationTimelinePara
             "D12",
             NegotiationTimelineParams(
                 D=12,
-                s_max_per_day=3,
-                max_session_rounds=36,
+                s_max_per_day=2,
+                max_session_rounds=12,
                 max_total_turns_per_session=32,
             ),
         ),

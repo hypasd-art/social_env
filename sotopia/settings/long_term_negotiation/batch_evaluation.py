@@ -316,6 +316,7 @@ async def run_long_term_negotiation_eval_batch_async(
     nest_trace_dirs_by_model_time: bool = False,
     run_timestamp: str | None = None,
     negotiation_run_config: dict[str, Any] | None = None,
+    write_execution_record: bool = False,
 ) -> list[dict[str, Any]]:
     """对多个 ``agent_models`` 各重复 ``repeats_per_model`` 次，并发上限 ``batch_size``。
 
@@ -424,6 +425,7 @@ async def run_long_term_negotiation_eval_batch_async(
                 run_terminal_llm_eval=run_terminal_llm_eval,
                 history_max_action_log=history_max_action_log,
                 negotiation_run_config=negotiation_run_config,
+                write_execution_record=write_execution_record,
                 **trace_kw,
             )
         except Exception:

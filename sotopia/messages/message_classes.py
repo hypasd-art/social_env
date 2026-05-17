@@ -64,7 +64,7 @@ class Observation(Message):
 
     def to_natural_language(self) -> str:
         if self.turn_number == 0:
-            return f"\n{self.last_turn}\nConversation Starts:\n"
+            return f"\n{self.last_turn}\n" # Conversation Starts:\n
         else:
             return f"Turn #{self.turn_number - 1}: {self.last_turn}\n"
 

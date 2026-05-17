@@ -230,7 +230,36 @@ def _relationship_snippets_for_agent(agent_pk: str, in_episode_agent_pks: set[st
         story = str(getattr(rp, "background_story", "") or "").strip()
         if not story:
             continue
-        out.append(story)
+        # 提取关键信息，去掉社会图种子 ID 前缀
+        trimmed = story
+        if "Social graph seeded for '" in trimmed and "'." in trimmed:
+            i0 = trimmed.index("'.") + 2
+            trimmed = trimmed[i0:].strip()
+        # 取对方对你的印象（other->self 方向）
+        impression = ""
+        if "Impressions" in trimmed:
+            imp_idx = trimmed.index("Impressions")
+            imp_text = trimmed[imp_idx:]
+            # 找 other-> 方向的印象
+            needle = f"{other}->"
+            if needle in imp_text:
+                i_start = imp_text.index(needle)
+                rest = imp_text[i_start + len(needle):]
+                if " | " in rest:
+                    rest = rest[:rest.index(" | ")]
+                if "Expects" in rest:
+                    rest = rest[:rest.index("Expects")]
+                impression = f"{other}-> you: {rest.strip().rstrip('.').strip()}"
+        # 组装摘要
+        parts: list[str] = []
+        # 关系类型 + trust_bias
+        rel_line = trimmed.split(". Impressions")[0] if ". Impressions" in trimmed else trimmed[:240]
+        rel_line = " ".join(rel_line.split())[:200]
+        if rel_line:
+            parts.append(rel_line)
+        if impression:
+            parts.append(impression)
+        out.append(" | ".join(parts))
     # 去重保序
     seen: set[str] = set()
     dedup: list[str] = []
@@ -239,14 +268,19 @@ def _relationship_snippets_for_agent(agent_pk: str, in_episode_agent_pks: set[st
             continue
         seen.add(s)
         dedup.append(s)
-    return dedup[:6]
+    return dedup[:6] # [:6]
 
 
 def _build_role_addons_from_env_binding(
     environment_profile_pk: str,
     roster: tuple[str, ...],
+    *,
+    agent_display_names: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """从 EnvAgentComboStorage 读取当前场景绑定的 agent/profile/relationship 摘要，按 role 返回。"""
+    """从 EnvAgentComboStorage 读取当前场景绑定的 agent/profile/relationship 摘要，按 role 返回。
+
+    ``agent_display_names`` 若不传则从 DB AgentProfile 取姓名；传了则用传入的名字（与 agent 自身一致）。
+    """
     try:
         combos = list(
             EnvAgentComboStorage.find(  # type: ignore[attr-defined]
@@ -262,26 +296,32 @@ def _build_role_addons_from_env_binding(
     agent_ids = list(getattr(combo, "agent_ids", []) or [])
     role_to_pk = {role: agent_ids[i] for i, role in enumerate(roster) if i < len(agent_ids)}
     in_episode = set(role_to_pk.values())
-    role_display_name: dict[str, str] = {}
+    # 统一名字：优先用传入的 agent_display_names，否则从 DB AgentProfile 读取
+    effective_names = dict(agent_display_names or {})
+    pk_to_name: dict[str, str] = {}
     for role, agent_pk in role_to_pk.items():
-        try:
-            ap = AgentProfile.get(agent_pk)
-            fn = str(getattr(ap, "first_name", "") or "").strip()
-            ln = str(getattr(ap, "last_name", "") or "").strip()
-            dn = " ".join(x for x in (fn, ln) if x).strip()
-            role_display_name[role] = dn or default_display_name_for_role(role)
-        except Exception:
-            role_display_name[role] = default_display_name_for_role(role)
+        if role in effective_names:
+            dn = effective_names[role]
+        else:
+            try:
+                ap = AgentProfile.get(agent_pk)
+                fn = str(getattr(ap, "first_name", "") or "").strip()
+                ln = str(getattr(ap, "last_name", "") or "").strip()
+                dn = " ".join(x for x in (fn, ln) if x).strip() or default_display_name_for_role(role)
+            except Exception:
+                dn = default_display_name_for_role(role)
+        effective_names[role] = dn
+        pk_to_name[agent_pk] = dn
     out: dict[str, str] = {}
     for role, agent_pk in role_to_pk.items():
         parts: list[str] = []
-        peers = [f"- {role_display_name.get(r, r)}" for r in roster if r in role_display_name]
+        peers = [f"- {effective_names[r]}" for r in roster if r in effective_names]
         if peers:
             parts.append(
-                "[who_is_who]\n"
+                "who you can take a talk with:\n"
                 + "\n".join(peers)
                 + "\nUse only these personal names in **speak** and in **action** JSON participant fields "
-                "(same spelling as in the Environment message you see this turn)."
+                # "(same spelling as in the Environment message you see this turn)."
             )
         try:
             ap1 = AgentProfile.get(agent_pk)
@@ -290,21 +330,19 @@ def _build_role_addons_from_env_binding(
             if marker in pav:
                 i0 = pav.index(marker)
                 snippet = pav[i0 : i0 + 980].strip()
-                parts.append("[AgentProfile — natural language style]\n" + snippet)
+                parts.append("Profile:\n" + snippet)
         except Exception:
             pass
         ap2 = _agent_profile_v2_for_agent(agent_pk)
         if ap2 is not None:
             parts.append(
-                "[AgentProfileV2] "
-                f"role_type={getattr(ap2, 'role_type', '')}; "
-                f"risk_preference={getattr(ap2, 'risk_preference', '')}; "
+                "Profile:\n"
                 f"initial_reputation={getattr(ap2, 'initial_reputation', '')}; "
                 f"initial_resources={dict(getattr(ap2, 'initial_resources', {}) or {})}"
             )
         rels = _relationship_snippets_for_agent(agent_pk, in_episode)
         if rels:
-            parts.append("[RelationshipProfile related to you]\n- " + "\n- ".join(rels))
+            parts.append("Relationships related to you:\n- " + "\n- ".join(rels))
         if parts:
             out[role] = "\n".join(parts)
     return out
@@ -517,7 +555,13 @@ async def run_llm_negotiation_episode_evaluation(
             model_dict, roster, negotiation_run_config=negotiation_run_config
         )
         if environment_profile_pk:
-            role_addons = _build_role_addons_from_env_binding(environment_profile_pk, roster)
+            disp_from_agents = {
+                r: str(getattr(ag, "_canonical_display_names", {}).get(r, r))
+                for r, ag in agents_map.items()
+            }
+            role_addons = _build_role_addons_from_env_binding(
+                environment_profile_pk, roster, agent_display_names=disp_from_agents,
+            )
             for role, addon in role_addons.items():
                 ag = agents_map.get(role)
                 if ag is None:

@@ -25,19 +25,19 @@ cd "$(dirname "$0")/../.."   # 回到 social_env 根目录
 
 # --------------- 合成（V2 extended）---------------
 echo "=== Phase 1: 场景合成（LLM extended，V2 确定性规则）==="
-rm -rf ~/.sotopia/data/
+# rm -rf ~/.sotopia/data/
 
-PYTHONPATH=. python scripts/generate_long_term_negotiation_llm_extended.py \
-  --model "custom/deepseek-v4-pro@https://api.deepseek.com" \
-  --agent-profile-model "custom/deepseek-v4-pro@https://api.deepseek.com" \
-  --n 3 \
-  --scenario-mix business_coopetition,wet_market_competition,resource_scheduling_management \
-  --mode-counts firms3=3 \
-  --concurrency 8 \
-  --timeline-labels D2 \
-  --requirements "V2 确定性规则 + LLM 差异化 agent 经济参数 + 种子驱动 market_state/psych" \
-  --tag ltr_v2_merged \
-  --agent-profile-out long_term_negotiation_llm_agent_profiles.v2_merged.json
+# PYTHONPATH=. python scripts/generate_long_term_negotiation_llm_extended.py \
+#   --model "custom/deepseek-v4-pro@https://api.deepseek.com" \
+#   --agent-profile-model "custom/deepseek-v4-pro@https://api.deepseek.com" \
+#   --n 6 \
+#   --scenario-mix business_coopetition,wet_market_competition,resource_scheduling_management \
+#   --mode-counts firms3=3,firms4=3 \
+#   --concurrency 8 \
+#   --timeline-labels D2,D3 \
+#   --requirements "V2 确定性规则 + LLM 差异化 agent 经济参数 + 种子驱动 market_state/psych" \
+#   --tag ltr_v2_merged \
+#   --agent-profile-out long_term_negotiation_llm_agent_profiles.v2_merged.json
 
 # --------------- 评测 ---------------
 echo ""
@@ -48,7 +48,7 @@ PYTHONPATH=. python -m sotopia.cli.benchmark.negotiation_batch negotiation-batch
     --agent-model "custom/deepseek-v4-flash@https://api.deepseek.com" \
     --evaluator-model "custom/deepseek-v4-flash@https://api.deepseek.com" \
     --run-config sotopia/settings/long_term_negotiation/run_config_examples/summarizing_memory.json \
-    --batch-size 8 --repeats 1 \
+    --batch-size 1 --repeats 1 \
     --scenario-manifest ~/.sotopia/data/long_term_negotiation_llm_manifest.json \
     --print-logs \
     --execution-trace-dir runs/execution_traces \

@@ -61,7 +61,7 @@ default_model_list: list[str] = [
 dimension_range_mapping = OrderedDict(
     {
         "social_rules": ["SOC", [-10, 0]],
-        "secret": ["SEC", [-10, 0]],
+        # "secret" 已从 SotopiaDimensions 移除，保留兼容旧数据
         "financial_and_material_benefits": ["FIN", [-5, 5]],
         "relationship": ["REL", [-5, 5]],
         "knowledge": ["KNO", [0, 10]],

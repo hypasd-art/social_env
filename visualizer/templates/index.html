@@ -7,144 +7,341 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; }
-.header { background: #161b22; border-bottom: 1px solid #30363d; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
-.header h1 { font-size: 20px; color: #58a6ff; }
+
+/* ===== Header ===== */
+.header { background: #161b22; border-bottom: 1px solid #30363d; padding: 10px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 18px; color: #58a6ff; display: flex; align-items: center; gap: 10px; }
 .header .data-dir { font-size: 12px; color: #8b949e; }
-.layout { display: flex; height: calc(100vh - 50px); }
-.sidebar { width: 320px; min-width: 320px; border-right: 1px solid #30363d; overflow-y: auto; padding: 12px; background: #161b22; }
+
+/* ===== Layout ===== */
+.layout { display: flex; height: calc(100vh - 46px); }
+.sidebar { width: 340px; min-width: 340px; border-right: 1px solid #30363d; overflow-y: auto; padding: 12px; background: #161b22; }
 .main { flex: 1; overflow-y: auto; padding: 20px; }
-.episode-card { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: border-color .2s; }
-.episode-card:hover { border-color: #58a6ff; }
-.episode-card.active { border-color: #58a6ff; background: #1c2533; }
-.episode-card .title { font-weight: 600; font-size: 14px; }
-.episode-card .meta { font-size: 12px; color: #8b949e; margin-top: 4px; }
-.episode-card .score { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin: 4px 4px 0 0; }
-.score-success { background: #1a3d2f; color: #3fb950; }
-.score-fail { background: #3d1a1a; color: #f85149; }
-.score-timeout { background: #3d351a; color: #d2991d; }
-/* Section panels */
+
+/* ===== Run cards in sidebar ===== */
+.run-card { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: all .2s; }
+.run-card:hover { border-color: #58a6ff; }
+.run-card.active { border-color: #58a6ff; background: #1c2533; }
+.run-card .run-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.run-card .run-meta { font-size: 12px; color: #8b949e; display: flex; flex-wrap: wrap; gap: 4px; }
+.run-card .run-meta .tag { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 10px; font-size: 11px; }
+
+/* ===== Status badges ===== */
+.badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.badge-success { background: #1a3d2f; color: #3fb950; }
+.badge-timeout { background: #3d351a; color: #d2991d; }
+.badge-failure { background: #3d1a1a; color: #f85149; }
+.badge-info    { background: #1a2d3d; color: #58a6ff; }
+
+/* ===== Section panels ===== */
 .section { background: #21262d; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
-.section-header { background: #1c2128; padding: 10px 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid #30363d; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-.section-header:hover { background: #252d38; }
+.section-hdr { background: #1c2128; padding: 10px 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid #30363d; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+.section-hdr:hover { background: #252d38; }
 .section-body { padding: 16px; }
-/* Agent score grid */
+.hidden { display: none !important; }
+
+/* ===== Legend bar ===== */
+.legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px 16px; background: #1c2128; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 16px; font-size: 12px; }
+.legend-item { display: flex; align-items: center; gap: 6px; color: #8b949e; }
+
+/* ===== Agent avatar icons ===== */
+.avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; position: relative; }
+.avatar-sm { width: 28px; height: 28px; font-size: 12px; }
+.avatar-lg { width: 52px; height: 52px; font-size: 22px; }
+.avatar .role-icon { position: absolute; bottom: -2px; right: -2px; font-size: 12px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #21262d; border: 1px solid #30363d; }
+.avatar-sm .role-icon { font-size: 8px; width: 14px; height: 14px; bottom: -3px; right: -3px; }
+
+/* Agent color palette */
+.agent-c0 { background: #388bfd44; color: #58a6ff; border: 2px solid #388bfd; }
+.agent-c1 { background: #3fb95044; color: #3fb950; border: 2px solid #3fb950; }
+.agent-c2 { background: #d2991d44; color: #d2991d; border: 2px solid #d2991d; }
+.agent-c3 { background: #f8514944; color: #f85149; border: 2px solid #f85149; }
+.agent-c4 { background: #a371f744; color: #a371f7; border: 2px solid #a371f7; }
+.agent-c5 { background: #79c0ff44; color: #79c0ff; border: 2px solid #79c0ff; }
+.agent-c6 { background: #f778ba44; color: #f778ba; border: 2px solid #f778ba; }
+
+/* ===== Score grid ===== */
 .score-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.agent-card { background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 14px; }
-.agent-card h4 { font-size: 14px; margin-bottom: 8px; color: #58a6ff; }
-.agent-card .overall { font-size: 24px; font-weight: 700; color: #d2a8ff; margin-bottom: 8px; }
-.dimension-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; border-bottom: 1px solid #30363d33; }
-.dimension-row .dim-name { color: #8b949e; }
-.dimension-row .dim-score { font-weight: 600; }
-/* Timeline */
-.timeline { position: relative; padding-left: 24px; }
-.timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #30363d; }
-.timeline-entry { position: relative; margin-bottom: 12px; padding: 8px 12px; background: #1c2128; border: 1px solid #30363d; border-radius: 6px; }
-.timeline-entry::before { content: ''; position: absolute; left: -20px; top: 12px; width: 8px; height: 8px; border-radius: 50%; background: #58a6ff; }
-.timeline-entry.sched::before { background: #d2991d; }
-.timeline-entry.session::before { background: #3fb950; }
-.timeline-entry.action::before { background: #f85149; }
-.timeline-entry .ts-badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; margin-right: 8px; }
-.badge-sched { background: #3d351a; color: #d2991d; }
-.badge-session { background: #1a3d2f; color: #3fb950; }
-.badge-action { background: #3d1a1a; color: #f85149; }
-.timeline-entry .entry-agent { font-weight: 600; font-size: 13px; }
-.timeline-entry .entry-content { font-size: 13px; color: #c9d1d9; margin-top: 4px; white-space: pre-wrap; word-break: break-all; }
-/* Chat-style messages */
-.chat-msg { display: flex; gap: 12px; margin-bottom: 12px; }
-.chat-msg .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
-.chat-msg .bubble { background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 10px 14px; max-width: 70%; font-size: 14px; }
-.chat-msg .bubble .sender { font-size: 12px; color: #58a6ff; margin-bottom: 4px; font-weight: 600; }
-.chat-msg.right { flex-direction: row-reverse; }
-.chat-msg.right .bubble { background: #1a3d5c; border-color: #1f6feb44; }
-/* Contract card */
-.contract-card { background: #1c2128; border: 1px solid #3fb95044; border-radius: 6px; padding: 10px; margin-bottom: 8px; font-size: 13px; }
-.contract-card .contract-title { color: #3fb950; font-weight: 600; margin-bottom: 4px; }
-/* Rule metrics table */
+.agent-card { background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 14px; position: relative; border-left: 3px solid transparent; }
+.agent-card.card-c0 { border-left-color: #388bfd; }
+.agent-card.card-c1 { border-left-color: #3fb950; }
+.agent-card.card-c2 { border-left-color: #d2991d; }
+.agent-card.card-c3 { border-left-color: #f85149; }
+.agent-card.card-c4 { border-left-color: #a371f7; }
+.agent-card .card-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.agent-card .card-hdr h4 { font-size: 14px; }
+.agent-card .overall { font-size: 28px; font-weight: 700; color: #d2a8ff; margin-bottom: 6px; }
+
+/* ===== Dimension bars ===== */
+.dim-row { display: flex; align-items: center; padding: 4px 0; font-size: 13px; gap: 8px; }
+.dim-row .dim-name { width: 160px; min-width: 160px; color: #8b949e; text-align: right; font-size: 11px; }
+.dim-row .dim-bar-wrap { flex: 1; height: 8px; background: #30363d55; border-radius: 4px; overflow: hidden; }
+.dim-row .dim-bar { height: 8px; border-radius: 4px; transition: width .5s; }
+.dim-row .dim-val  { width: 40px; min-width: 40px; font-weight: 600; font-size: 12px; text-align: right; }
+
+/* ===== Timeline ===== */
+.timeline { position: relative; padding-left: 32px; }
+.timeline::before { content: ''; position: absolute; left: 15px; top: 0; bottom: 0; width: 2px; background: #30363d; }
+.tl-entry { position: relative; margin-bottom: 10px; padding: 10px 14px; background: #1c2128; border: 1px solid #30363d; border-radius: 8px; display: flex; gap: 10px; align-items: flex-start; }
+.tl-entry::before { content: ''; position: absolute; left: -21px; top: 14px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid; background: #0f1117; }
+.tl-entry.evt-sched::before  { border-color: #d2991d; }
+.tl-entry.evt-session::before { border-color: #3fb950; }
+.tl-entry.evt-action::before  { border-color: #f85149; }
+.tl-entry.evt-contract::before { border-color: #a371f7; }
+.tl-entry.evt-system::before   { border-color: #8b949e; }
+.tl-entry .tl-icon { font-size: 18px; flex-shrink: 0; line-height: 1; }
+.tl-entry .tl-body { flex: 1; min-width: 0; }
+.tl-entry .tl-meta { font-size: 11px; color: #8b949e; margin-bottom: 3px; }
+.tl-entry .tl-content { font-size: 13px; color: #c9d1d9; white-space: pre-wrap; word-break: break-word; }
+
+/* ===== Chat style ===== */
+.chat-msg { display: flex; gap: 10px; margin-bottom: 14px; align-items: flex-start; }
+.chat-msg .bubble { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 10px 14px; max-width: 72%; font-size: 14px; }
+.chat-msg .bubble .bbl-sender { font-size: 11px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.chat-msg .bubble .bbl-text { white-space: pre-wrap; word-break: break-word; }
+/* Align left by default; if agent is the "self", push right */
+.chat-msg.msg-right { flex-direction: row-reverse; }
+.chat-msg.msg-right .bubble { background: #1a3d5c; border-color: #1f6feb44; }
+
+/* ===== Contract card ===== */
+.contract-card { background: #1c2128; border: 1px solid #3fb95044; border-left: 3px solid #3fb950; border-radius: 6px; padding: 10px; margin-bottom: 8px; font-size: 13px; }
+.contract-card .ctr-title { color: #3fb950; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+
+/* ===== Metrics table ===== */
 .metrics-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .metrics-table td { padding: 4px 12px; border-bottom: 1px solid #30363d33; }
-.metrics-table td:first-child { color: #8b949e; width: 40%; }
+.metrics-table td:first-child { color: #8b949e; width: 45%; display: flex; align-items: center; gap: 6px; }
 .metrics-table td:last-child { font-weight: 600; text-align: right; }
-/* Tab bar */
+
+/* ===== Tabs ===== */
 .tabs { display: flex; gap: 0; border-bottom: 1px solid #30363d; margin-bottom: 16px; }
-.tab-btn { padding: 8px 16px; cursor: pointer; border: none; background: none; color: #8b949e; font-size: 14px; border-bottom: 2px solid transparent; transition: all .2s; }
+.tab-btn { padding: 8px 16px; cursor: pointer; border: none; background: none; color: #8b949e; font-size: 14px; border-bottom: 2px solid transparent; transition: all .2s; display: flex; align-items: center; gap: 6px; }
 .tab-btn:hover { color: #e1e4e8; }
 .tab-btn.active { color: #58a6ff; border-bottom-color: #58a6ff; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-/* Placeholder */
+
+/* ===== Empty state ===== */
 .empty-state { text-align: center; padding: 60px 20px; color: #484f58; }
-.empty-state svg { margin-bottom: 16px; opacity: 0.3; }
+
+/* ===== Run config form ===== */
+.form-card { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: end; }
+.form-field { display: flex; flex-direction: column; gap: 4px; }
+.form-field label { font-size: 12px; color: #8b949e; font-weight: 600; }
+.form-field input, .form-field select { background: #0f1117; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; color: #e1e4e8; font-size: 13px; width: 180px; }
+.form-field input:focus, .form-field select:focus { outline: none; border-color: #58a6ff; }
+.btn { padding: 7px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: #238636; color: #fff; }
+.btn-primary:hover { background: #2ea043; }
+.btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+.btn-secondary:hover { background: #30363d; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ===== Live progress ===== */
+.progress-bar-wrap { height: 6px; background: #30363d; border-radius: 3px; overflow: hidden; margin: 8px 0; }
+.progress-bar { height: 6px; background: linear-gradient(90deg, #388bfd, #3fb950); border-radius: 3px; transition: width .3s; }
+.live-ep { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; background: #1c2128; border: 1px solid #30363d; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+.live-ep .ep-seq { width: 40px; color: #8b949e; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
+
 <div class="header">
-    <h1> Agent Interaction Visualizer</h1>
+    <h1>
+        <span>🤖</span> Agent Interaction Visualizer
+    </h1>
     <span class="data-dir" id="dataDir"></span>
 </div>
+
 <div class="layout">
-    <!-- Sidebar: episode list -->
+    <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
-        <div class="empty-state" id="sidebarEmpty">
-            <p>Loading runs...</p>
+        <!-- New run panel -->
+        <div class="form-card" id="newRunPanel">
+            <div style="font-weight:600;font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                <span>🚀</span> New Evaluation Run
+            </div>
+            <!-- API config -->
+            <div class="form-row">
+                <div class="form-field" style="flex:1;">
+                    <label>🔑 API Key (CUSTOM_API_KEY)</label>
+                    <input id="cfgApiKey" type="password" placeholder="sk-..." style="width:100%;">
+                </div>
+                <div class="form-field" style="flex:1;">
+                    <label>🌐 API Base URL</label>
+                    <input id="cfgApiBase" value="https://api.deepseek.com" placeholder="https://api.openai.com" style="width:100%;">
+                </div>
+            </div>
+            <!-- Model config -->
+            <div class="form-row">
+                <div class="form-field">
+                    <label>Agent Model</label>
+                    <input id="cfgAgentModel" value="deepseek-v4-flash" placeholder="deepseek-v4-flash">
+                </div>
+                <div class="form-field">
+                    <label>Evaluator Model</label>
+                    <input id="cfgEvalModel" value="deepseek-v4-flash" placeholder="deepseek-v4-flash">
+                </div>
+            </div>
+            <!-- Run config -->
+            <div class="form-row">
+                <div class="form-field">
+                    <label>Participants</label>
+                    <select id="cfgNumParts">
+                        <option value="2">2 👤</option>
+                        <option value="3" selected>3 👤</option>
+                        <option value="4">4 👤👤</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>Repeats</label>
+                    <input id="cfgRepeats" value="1" type="number" min="1" max="10" style="width:70px">
+                </div>
+                <div class="form-field">
+                    <label>Batch Size</label>
+                    <input id="cfgBatchSize" value="3" type="number" min="1" max="10" style="width:70px">
+                </div>
+            </div>
+            <!-- Scenario selection -->
+            <div class="form-row">
+                <div class="form-field" style="flex:1;">
+                    <label>📋 Scenario (optional)</label>
+                    <select id="cfgScenario" style="width:100%;">
+                        <option value="">None — use default params</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="btnStartRun" onclick="startNewRun()">
+                ▶ Start Run
+            </button>
+            <button class="btn btn-secondary" onclick="refreshRuns()" style="float:right;">
+                🔄 Refresh
+            </button>
+        </div>
+        <!-- Live progress (hidden initially) -->
+        <div class="form-card hidden" id="liveProgress">
+            <div style="font-weight:600;font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                <span class="spinner"></span> Running...
+            </div>
+            <div style="font-size:12px;color:#8b949e;" id="liveStatus">Starting evaluation...</div>
+            <div class="progress-bar-wrap"><div class="progress-bar" id="liveBar" style="width:0%"></div></div>
+            <div id="liveEpList"></div>
+            <div class="hidden" id="liveConv" style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;"></div>
+            <div class="hidden" id="liveOutputs" style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;"></div>
+        </div>
+        <!-- Run list -->
+        <div style="font-weight:600;font-size:13px;color:#8b949e;margin:8px 0 6px;">📁 Completed Runs</div>
+        <div id="runList">
+            <div class="empty-state" id="sidebarEmpty"><p>Loading...</p></div>
         </div>
     </div>
-    <!-- Main content -->
+
+    <!-- Main -->
     <div class="main" id="main">
         <div class="empty-state" id="mainEmpty">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
-            <p>Select an episode from the sidebar to view details</p>
+            <div style="font-size:48px;margin-bottom:12px;">📊</div>
+            <p>Select a run to view details, or start a new evaluation above</p>
         </div>
     </div>
 </div>
 
 <script>
+// ===== Constants =====
 const API_BASE = '';
+const AGENT_COLORS = ['agent-c0','agent-c1','agent-c2','agent-c3','agent-c4','agent-c5','agent-c6'];
+const CARD_COLORS = ['card-c0','card-c1','card-c2','card-c3','card-c4','card-c5','card-c6'];
+const ROLE_ICONS = { firm: '🏭', firm_a: '🏭', firm_b: '🏪', firm_c: '🏗️', firm_d: '🏢',
+                      investor: '💰', regulator: '⚖️', evaluator: '📊', no_agent: '🖥️' };
+const DEFAULT_ICON = '🤖';
 
-let currentRunId = null;
-let currentDetail = null;
+// Map agent keys from data to consistent indices
+let agentColorMap = {};
+let colorIdx = 0;
 
-async function loadRuns() {
-    const sidebar = document.getElementById('sidebar');
+function agentColor(key) {
+    if (!key) return AGENT_COLORS[0];
+    if (!(key in agentColorMap)) {
+        agentColorMap[key] = AGENT_COLORS[colorIdx % AGENT_COLORS.length];
+        colorIdx++;
+    }
+    return agentColorMap[key];
+}
+function cardColor(key) {
+    if (!key) return CARD_COLORS[0];
+    agentColor(key); // ensure registered
+    return CARD_COLORS[(Object.keys(agentColorMap).indexOf(key)) % CARD_COLORS.length];
+}
+function agentInitials(name) {
+    const parts = String(name || '?').split(/[\s_]+/);
+    return parts.map(p => p[0]).join('').toUpperCase().slice(0, 3);
+}
+function agentRoleIcon(key) {
+    const k = String(key || '').toLowerCase();
+    for (const [rk, ri] of Object.entries(ROLE_ICONS)) {
+        if (k.includes(rk)) return ri;
+    }
+    return DEFAULT_ICON;
+}
+
+// ===== API calls =====
+async function apiGet(url) {
+    const resp = await fetch(API_BASE + url);
+    return resp.json();
+}
+async function apiPost(url, body) {
+    const resp = await fetch(API_BASE + url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    return resp.json();
+}
+
+// ===== Load runs =====
+async function refreshRuns() {
+    document.getElementById('sidebarEmpty').innerHTML = '<p>Loading...</p>';
     try {
-        const resp = await fetch(API_BASE + '/api/runs');
-        const runs = await resp.json();
+        const runs = await apiGet('/api/runs');
         document.getElementById('dataDir').textContent = runs.length + ' evaluation runs found';
+        const rl = document.getElementById('runList');
         if (!runs.length) {
-            document.getElementById('sidebarEmpty').innerHTML = '<p>No runs found</p>';
+            rl.innerHTML = '<div class="empty-state"><p>No runs found</p></div>';
             return;
         }
-        sidebar.innerHTML = '';
-        runs.forEach(run => {
-            const card = document.createElement('div');
-            card.className = 'episode-card';
+        rl.innerHTML = runs.map(run => {
             const succRate = (run.success_rate * 100).toFixed(1);
-            const sClass = run.success_rate >= 0.8 ? 'score-success' : run.success_rate >= 0.5 ? 'score-timeout' : 'score-fail';
-            card.innerHTML = `
-                <div class="title">${esc(run.id)}</div>
-                <div class="meta">
-                    ${run.timestamp ? esc(run.timestamp) + ' · ' : ''}
-                    ${run.n_episodes} episodes
-                    ${run.agent_models.length ? ' · ' + run.agent_models.join(', ') : ''}
+            const sIcon = run.success_rate >= 0.8 ? '✅' : run.success_rate >= 0.5 ? '⚠️' : '❌';
+            const sClass = run.success_rate >= 0.8 ? 'badge-success' : run.success_rate >= 0.5 ? 'badge-timeout' : 'badge-failure';
+            const ts = run.timestamp ? run.timestamp.replace(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/, '$1-$2-$3 $4:$5') : '';
+            return `<div class="run-card" onclick="loadRun('${esc(run.id)}', this)" data-id="${esc(run.id)}">
+                <div class="run-title">
+                    <span class="badge ${sClass}">${sIcon} ${succRate}%</span>
+                    ${esc(run.id.slice(0,40))}${run.id.length>40?'…':''}
                 </div>
-                <span class="score ${sClass}">success ${succRate}%</span>
-                ${Object.entries(run.llm_overall_mean || {}).map(([k,v]) => `<span class="score score-timeout">${k}: ${Number(v).toFixed(3)}</span>`).join('')}
-            `;
-            card.onclick = () => loadRun(run.id, card);
-            sidebar.appendChild(card);
-        });
+                <div class="run-meta">
+                    ${ts ? `<span class="tag">🕐 ${esc(ts)}</span>` : ''}
+                    <span class="tag">📋 ${run.n_episodes} ep</span>
+                    ${(run.agent_models||[]).map(m => `<span class="tag">🤖 ${esc(m)}</span>`).join('')}
+                </div>
+            </div>`;
+        }).join('');
     } catch (e) {
-        document.getElementById('sidebarEmpty').innerHTML = '<p>Error: ' + esc(String(e)) + '</p>';
+        document.getElementById('runList').innerHTML = '<div class="empty-state"><p>Error: ' + esc(String(e)) + '</p></div>';
     }
 }
 
+// ===== Load run detail =====
 async function loadRun(runId, cardEl) {
     currentRunId = runId;
-    document.querySelectorAll('.episode-card').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.run-card').forEach(c => c.classList.remove('active'));
     if (cardEl) cardEl.classList.add('active');
+    agentColorMap = {}; colorIdx = 0;
 
     try {
-        const resp = await fetch(API_BASE + '/api/run/' + runId);
-        const data = await resp.json();
+        const data = await apiGet('/api/run/' + runId);
         currentDetail = data;
         renderRunDetail(data);
     } catch (e) {
@@ -153,130 +350,170 @@ async function loadRun(runId, cardEl) {
 }
 
 function renderRunDetail(data) {
-    const main = document.getElementById('main');
     const agg = data.aggregate_means || {};
     const overall = agg.overall || agg;
     const rows = data.rows || [];
+    const main = document.getElementById('main');
 
     let html = '';
 
+    // Legend
+    html += '<div class="legend">';
+    html += '<div class="legend-item">📅 Scheduling</div>';
+    html += '<div class="legend-item">💬 Session</div>';
+    html += '<div class="legend-item">⚡ Agent Action</div>';
+    html += '<div class="legend-item">📝 Contract</div>';
+    html += '<div class="legend-item">📊 Evaluation</div>';
+    html += '<div class="legend-item">✅ Success</div>';
+    html += '<div class="legend-item">⏰ Timeout</div>';
+    html += '<div class="legend-item">❌ Failure</div>';
+    html += '</div>';
+
     // Tabs
     html += '<div class="tabs">';
-    html += '<button class="tab-btn active" onclick="switchTab(event, \'overview\')">Overview</button>';
-    html += '<button class="tab-btn" onclick="switchTab(event, \'episodes\')">Episodes (' + rows.length + ')</button>';
-    html += '<button class="tab-btn" onclick="switchTab(event, \'llmScores\')">LLM Scores</button>';
-    html += '<button class="tab-btn" onclick="switchTab(event, \'metrics\')">Rule Metrics</button>';
+    html += '<button class="tab-btn active" onclick="switchTab(event,\'overview\')">📊 Overview</button>';
+    html += '<button class="tab-btn" onclick="switchTab(event,\'episodes\')">📋 Episodes <span class="badge badge-info">'+rows.length+'</span></button>';
+    html += '<button class="tab-btn" onclick="switchTab(event,\'llmScores\')">🎯 LLM Scores</button>';
+    html += '<button class="tab-btn" onclick="switchTab(event,\'metrics\')">📈 Rule Metrics</button>';
     html += '</div>';
 
-    // Overview tab
-    html += '<div class="tab-content active" id="tab-overview">';
-    html += buildOverview(overall, rows, data);
-    html += '</div>';
-
-    // Episodes tab
-    html += '<div class="tab-content" id="tab-episodes">';
-    html += buildEpisodesList(rows, data);
-    html += '</div>';
-
-    // LLM Scores tab
-    html += '<div class="tab-content" id="tab-llmScores">';
-    html += buildLLMScores(overall, rows);
-    html += '</div>';
-
-    // Metrics tab
-    html += '<div class="tab-content" id="tab-metrics">';
-    html += buildMetrics(overall);
-    html += '</div>';
+    html += '<div class="tab-content active" id="tab-overview">' + buildOverview(overall, rows, data) + '</div>';
+    html += '<div class="tab-content" id="tab-episodes">' + buildEpisodesList(rows, data) + '</div>';
+    html += '<div class="tab-content" id="tab-llmScores">' + buildLLMScores(overall, rows) + '</div>';
+    html += '<div class="tab-content" id="tab-metrics">' + buildMetrics(overall) + '</div>';
 
     main.innerHTML = html;
 }
 
+// ===== Icon helpers =====
+function termIcon(t) { return t==='success'?'✅':t==='timeout'?'⏰':'❌'; }
+function termClass(t) { return t==='success'?'badge-success':t==='timeout'?'badge-timeout':'badge-failure'; }
+
+function agentAvatarEl(key, size) {
+    const sz = size || '';
+    const cl = agentColor(key);
+    const icon = agentRoleIcon(key);
+    const initials = agentInitials(key);
+    return `<div class="avatar ${sz} ${cl}">
+        ${initials}
+        <span class="role-icon">${icon}</span>
+    </div>`;
+}
+
+// ===== Overview =====
 function buildOverview(overall, rows, data) {
     const n = overall.n_episodes || rows.length;
     const succRate = overall.terminal_success_rate || 0;
     const rm = overall.rule_metrics_mean || {};
-
     let h = '<div class="score-grid">';
-    // Summary card
-    h += '<div class="agent-card">';
-    h += '<h4>Run Summary</h4>';
-    h += '<div class="dimension-row"><span class="dim-name">Episodes</span><span class="dim-score">' + n + '</span></div>';
-    h += '<div class="dimension-row"><span class="dim-name">Success Rate</span><span class="dim-score">' + (succRate * 100).toFixed(1) + '%</span></div>';
-    h += '<div class="dimension-row"><span class="dim-name">Final State Score</span><span class="dim-score">' + fmtNum(rm.negotiation_final_state_score) + '</span></div>';
-    h += '<div class="dimension-row"><span class="dim-name">Model</span><span class="dim-score">' + esc((data.agent_models || []).join(', ') || data.evaluator_model || '?') + '</span></div>';
+
+    // Summary
+    h += '<div class="agent-card"><div class="card-hdr"><h4>📊 Run Summary</h4></div>';
+    h += '<div class="dim-row"><span class="dim-name">Episodes</span><div class="dim-bar-wrap"></div><span class="dim-val">'+n+'</span></div>';
+    h += '<div class="dim-row"><span class="dim-name">Success Rate</span><div class="dim-bar-wrap"><div class="dim-bar" style="width:'+(succRate*100)+'%;background:#3fb950;"></div></div><span class="dim-val">'+(succRate*100).toFixed(1)+'%</span></div>';
+    h += '<div class="dim-row"><span class="dim-name">Final State Score</span><div class="dim-bar-wrap"></div><span class="dim-val">'+fmtNum(rm.negotiation_final_state_score)+'</span></div>';
+    h += '<div class="dim-row"><span class="dim-name">Model</span><div class="dim-bar-wrap"></div><span class="dim-val">'+esc((data.agent_models||[]).join(',')||data.evaluator_model||'?')+'</span></div>';
     h += '</div>';
 
-    // LLM overall card
-    const llmOverall = overall.llm_overall_mean || {};
-    if (Object.keys(llmOverall).length) {
-        h += '<div class="agent-card">';
-        h += '<h4>LLM Overall (mean)</h4>';
-        for (const [k, v] of Object.entries(llmOverall)) {
-            h += '<div class="dimension-row"><span class="dim-name">' + esc(k) + '</span><span class="dim-score">' + fmtNum(v) + '</span></div>';
+    // By-model breakdown
+    const byModel = (data.aggregate_means||{}).by_model || {};
+    for (const [model, stats] of Object.entries(byModel)) {
+        const sr = (stats.terminal_success_rate || 0) * 100;
+        const sIcon = sr >= 80 ? '✅' : sr >= 50 ? '⚠️' : '❌';
+        h += '<div class="agent-card"><div class="card-hdr"><h4>🤖 '+esc(stats.model_display||model)+'</h4></div>';
+        h += '<div class="dim-row"><span class="dim-name">'+sIcon+' Success</span><div class="dim-bar-wrap"><div class="dim-bar" style="width:'+sr+'%;background:#3fb950;"></div></div><span class="dim-val">'+sr.toFixed(1)+'%</span></div>';
+        h += '<div class="dim-row"><span class="dim-name">Episodes</span><div class="dim-bar-wrap"></div><span class="dim-val">'+(stats.n_episodes||0)+'</span></div>';
+        const fss = (stats.rule_metrics_mean||{}).negotiation_final_state_score;
+        if (fss != null) h += '<div class="dim-row"><span class="dim-name">Final State</span><div class="dim-bar-wrap"></div><span class="dim-val">'+fmtNum(fss)+'</span></div>';
+        h += '</div>';
+    }
+
+    // LLM overall
+    const llmOv = overall.llm_overall_mean || {};
+    if (Object.keys(llmOv).length) {
+        h += '<div class="agent-card"><div class="card-hdr"><h4>🎯 LLM Overall (mean)</h4></div>';
+        for (const [k,v] of Object.entries(llmOv)) {
+            h += '<div class="dim-row"><span class="dim-name">'+esc(k)+'</span><div class="dim-bar-wrap"></div><span class="dim-val">'+fmtNum(v)+'</span></div>';
         }
         h += '</div>';
     }
 
-    // LLM dimension scores
+    // Dimension scores per agent with icons
     const dimScores = overall.llm_dimension_scores_mean || {};
     for (const [agent, dims] of Object.entries(dimScores)) {
-        h += '<div class="agent-card">';
-        h += '<h4>' + esc(agent) + '</h4>';
-        if (dims && typeof dims === 'object') {
-            const overallScore = dims.overall_score;
-            if (overallScore !== undefined) {
-                h += '<div class="overall">' + fmtNum(overallScore) + '</div>';
-            }
-            for (const [dk, dv] of Object.entries(dims)) {
-                if (dk === 'overall_score') continue;
-                h += '<div class="dimension-row"><span class="dim-name">' + esc(dk) + '</span><span class="dim-score">' + fmtNum(dv) + '</span></div>';
-            }
+        if (!dims || typeof dims !== 'object') continue;
+        const cc = cardColor(agent);
+        h += '<div class="agent-card '+cc+'"><div class="card-hdr">'+agentAvatarEl(agent)+'<h4>'+esc(agent)+'</h4></div>';
+        const os = dims.overall_score;
+        if (os !== undefined) h += '<div class="overall">'+fmtNum(os)+'</div>';
+        for (const [dk, dv] of Object.entries(dims)) {
+            if (dk === 'overall_score') continue;
+            const pct = Math.max(0, Math.min(100, (Number(dv)/10)*100));
+            const barColor = pct >= 60 ? '#3fb950' : pct >= 30 ? '#d2991d' : '#f85149';
+            h += '<div class="dim-row"><span class="dim-name">'+esc(dk)+'</span><div class="dim-bar-wrap"><div class="dim-bar" style="width:'+pct+'%;background:'+barColor+';"></div></div><span class="dim-val">'+fmtNum(dv)+'</span></div>';
         }
         h += '</div>';
     }
+
     h += '</div>';
     return h;
 }
 
+// ===== Episodes list =====
 function buildEpisodesList(rows, data) {
-    let h = '<div style="font-size:13px;color:#8b949e;margin-bottom:12px;">' + rows.length + ' episodes</div>';
-    rows.forEach((r, i) => {
+    let h = '<div style="font-size:13px;color:#8b949e;margin-bottom:12px;">'+rows.length+' episodes</div>';
+    rows.forEach((r,i) => {
         const term = r.terminal || '?';
-        const sClass = term === 'success' ? 'score-success' : term === 'timeout' ? 'score-timeout' : 'score-fail';
+        const seq = r.seq != null ? r.seq : i;
         h += '<div class="section">';
-        h += '<div class="section-header" onclick="this.parentElement.querySelector(\'.section-body\').classList.toggle(\'hidden\')">';
-        h += '<span>#' + (r.seq != null ? r.seq : i) + ' · ' + esc(r.scenario_codename || r.experiment_tag || '') + '</span>';
-        h += '<span class="score ' + sClass + '">' + esc(term) + '</span>';
-        h += '</div>';
-        h += '<div class="section-body">';
+        h += '<div class="section-hdr" onclick="this.parentElement.querySelector(\'.section-body\').classList.toggle(\'hidden\')">';
+        h += '<span>#'+seq+' · '+esc(r.scenario_codename||r.experiment_tag||'')+'</span>';
+        h += '<span style="display:flex;gap:6px;align-items:center;">';
+        h += '<button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="event.stopPropagation();viewCompletedConversation(\''+(currentRunId||'')+'\','+seq+')" title="View conversation">💬 Conv</button>';
+        h += '<span class="badge '+termClass(term)+'">'+termIcon(term)+' '+esc(term)+'</span>';
+        h += '</span>';
+        h += '</div><div class="section-body">';
         h += '<table class="metrics-table">';
-        h += '<tr><td>Agent Model</td><td>' + esc(r.agent_model || '?') + '</td></tr>';
-        h += '<tr><td>Evaluator</td><td>' + esc(r.evaluator_model || '?') + '</td></tr>';
-        h += '<tr><td>Participants</td><td>' + (r.num_participants || '?') + '</td></tr>';
-        h += '<tr><td>Terminal</td><td>' + esc(term) + '</td></tr>';
+
+        // Agent avatar row
+        const dims = r.llm_dimension_scores || {};
+        const agentKeys = Object.keys(dims);
+        if (agentKeys.length) {
+            h += '<tr><td>👥 Agents</td><td>';
+            h += agentKeys.map((ak,i) => agentAvatarEl(ak,'avatar-sm')+' <span style="font-size:12px;margin-right:8px;">'+esc(ak)+'</span>').join(' ');
+            h += '</td></tr>';
+        }
+
+        h += '<tr><td>🤖 Agent Model</td><td>'+esc(r.agent_model||'?')+'</td></tr>';
+        h += '<tr><td>📊 Evaluator</td><td>'+esc(r.evaluator_model||'?')+'</td></tr>';
+        h += '<tr><td>👥 Participants</td><td>'+(r.num_participants||'?')+'</td></tr>';
+        h += '<tr><td>'+termIcon(term)+' Terminal</td><td>'+esc(term)+'</td></tr>';
         if (r.rule_metrics) {
-            h += '<tr><td>Final State Score</td><td>' + fmtNum(r.rule_metrics.negotiation_final_state_score) + '</td></tr>';
-            h += '<tr><td>Macro Steps</td><td>' + fmtNum(r.rule_metrics.negotiation_macro_steps_used) + '</td></tr>';
-            h += '<tr><td>Sessions</td><td>' + fmtNum(r.rule_metrics.negotiation_n_session_log) + '</td></tr>';
-            h += '<tr><td>Contract Phase</td><td>' + fmtNum(r.rule_metrics.negotiation_primary_contract_phase) + '</td></tr>';
-            // Predefined rule scores
-            if (r.rule_metrics.negotiation_predefined_rule_score !== undefined) {
-                h += '<tr><td>Predef Rule Score</td><td>' + fmtNum(r.rule_metrics.negotiation_predefined_rule_score) + '</td></tr>';
-                if (r.rule_metrics.negotiation_predefined_rule_realized_margin !== undefined)
-                    h += '<tr><td>Realized Margin</td><td>' + fmtNum(r.rule_metrics.negotiation_predefined_rule_realized_margin) + '</td></tr>';
-                if (r.rule_metrics.negotiation_predefined_rule_total_profit !== undefined)
-                    h += '<tr><td>Total Profit</td><td>' + fmtNum(r.rule_metrics.negotiation_predefined_rule_total_profit) + '</td></tr>';
+            const rm = r.rule_metrics;
+            h += '<tr><td>📈 Final State Score</td><td>'+fmtNum(rm.negotiation_final_state_score)+'</td></tr>';
+            h += '<tr><td>⚡ Macro Steps</td><td>'+fmtNum(rm.negotiation_macro_steps_used)+'</td></tr>';
+            h += '<tr><td>💬 Sessions</td><td>'+fmtNum(rm.negotiation_n_session_log)+'</td></tr>';
+            h += '<tr><td>📝 Contract Phase</td><td>'+fmtNum(rm.negotiation_primary_contract_phase)+'</td></tr>';
+            // Predefined rule
+            if (rm.negotiation_predefined_rule_score !== undefined) {
+                h += '<tr><td>🎲 Predef Rule Score</td><td>'+fmtNum(rm.negotiation_predefined_rule_score)+'</td></tr>';
+                if (rm.negotiation_predefined_rule_realized_margin !== undefined)
+                    h += '<tr><td>💰 Realized Margin</td><td>'+fmtNum(rm.negotiation_predefined_rule_realized_margin)+'</td></tr>';
+                if (rm.negotiation_predefined_rule_total_profit !== undefined)
+                    h += '<tr><td>💵 Total Profit</td><td>'+fmtNum(rm.negotiation_predefined_rule_total_profit)+'</td></tr>';
             }
         }
         h += '</table>';
-        // LLM dimension scores per episode
-        const dims = r.llm_dimension_scores || {};
+
+        // Per-agent dimension scores
         if (Object.keys(dims).length) {
-            h += '<div style="margin-top:8px;font-weight:600;font-size:13px;color:#8b949e;">LLM Dimension Scores</div>';
+            h += '<div style="margin-top:10px;font-weight:600;font-size:13px;color:#8b949e;">🎯 LLM Dimension Scores</div>';
             for (const [agent, dd] of Object.entries(dims)) {
-                h += '<div style="font-size:12px;color:#58a6ff;margin-top:4px;">' + esc(agent) + '</div>';
-                for (const [dk, dv] of Object.entries(dd || {})) {
-                    h += '<div class="dimension-row"><span class="dim-name">' + esc(dk) + '</span><span class="dim-score">' + fmtNum(dv) + '</span></div>';
+                h += '<div style="margin-top:6px;display:flex;align-items:center;gap:6px;">'+agentAvatarEl(agent,'avatar-sm')+'<span style="font-size:12px;font-weight:600;">'+esc(agent)+'</span></div>';
+                for (const [dk, dv] of Object.entries(dd||{})) {
+                    const pct = Math.max(0,Math.min(100,(Number(dv)/10)*100));
+                    const barC = pct>=60?'#3fb950':pct>=30?'#d2991d':'#f85149';
+                    h += '<div class="dim-row"><span class="dim-name">'+esc(dk)+'</span><div class="dim-bar-wrap"><div class="dim-bar" style="width:'+pct+'%;background:'+barC+';"></div></div><span class="dim-val">'+fmtNum(dv)+'</span></div>';
                 }
             }
         }
@@ -285,29 +522,22 @@ function buildEpisodesList(rows, data) {
     return h;
 }
 
+// ===== LLM Scores tab =====
 function buildLLMScores(overall, rows) {
     const dimScores = overall.llm_dimension_scores_mean || {};
-    if (!Object.keys(dimScores).length) return '<div class="empty-state"><p>No LLM evaluation scores available</p></div>';
-
+    if (!Object.keys(dimScores).length) return '<div class="empty-state"><p>📊 No LLM evaluation scores available</p></div>';
     let h = '<div class="score-grid">';
     for (const [agent, dims] of Object.entries(dimScores)) {
-        if (!dims || typeof dims !== 'object') continue;
-        h += '<div class="agent-card">';
-        h += '<h4>' + esc(agent) + '</h4>';
-        const overallScore = dims.overall_score;
-        if (overallScore !== undefined) {
-            h += '<div class="overall">' + fmtNum(overallScore) + '</div>';
-        }
-        for (const [dk, dv] of Object.entries(dims)) {
-            if (dk === 'overall_score') continue;
-            const pct = Math.max(0, Math.min(100, (Number(dv) / 10) * 100));
-            h += '<div class="dimension-row">';
-            h += '<span class="dim-name">' + esc(dk) + '</span>';
-            h += '<span class="dim-score">' + fmtNum(dv) + '</span>';
-            h += '</div>';
-            // Mini bar
-            h += '<div style="height:3px;background:#30363d;border-radius:2px;margin:2px 0 6px;">';
-            h += '<div style="height:3px;width:' + pct + '%;background:linear-gradient(90deg,#58a6ff,#3fb950);border-radius:2px;"></div></div>';
+        if (!dims||typeof dims!=='object') continue;
+        const cc = cardColor(agent);
+        h += '<div class="agent-card '+cc+'"><div class="card-hdr">'+agentAvatarEl(agent)+'<h4>'+esc(agent)+'</h4></div>';
+        const os = dims.overall_score;
+        if (os !== undefined) h += '<div class="overall">'+fmtNum(os)+'</div>';
+        for (const [dk,dv] of Object.entries(dims)) {
+            if (dk==='overall_score') continue;
+            const pct = Math.max(0,Math.min(100,(Number(dv)/10)*100));
+            const barC = pct>=60?'#3fb950':pct>=30?'#d2991d':'#f85149';
+            h += '<div class="dim-row"><span class="dim-name">'+esc(dk)+'</span><div class="dim-bar-wrap"><div class="dim-bar" style="width:'+pct+'%;background:'+barC+';"></div></div><span class="dim-val">'+fmtNum(dv)+'</span></div>';
         }
         h += '</div>';
     }
@@ -315,48 +545,41 @@ function buildLLMScores(overall, rows) {
     return h;
 }
 
+// ===== Metrics tab =====
 function buildMetrics(overall) {
     const rm = overall.rule_metrics_mean || {};
-    if (!Object.keys(rm).length) return '<div class="empty-state"><p>No rule metrics available</p></div>';
-
+    if (!Object.keys(rm).length) return '<div class="empty-state"><p>📈 No rule metrics available</p></div>';
     let h = '<div class="score-grid">';
 
-    // General metrics
-    h += '<div class="agent-card"><h4>General</h4>';
-    h += '<table class="metrics-table">';
-    const generalKeys = ['negotiation_terminal_is_success', 'negotiation_terminal_is_timeout', 'negotiation_terminal_is_failure',
-        'negotiation_macro_steps_used', 'negotiation_n_session_log', 'negotiation_n_action_log', 'negotiation_n_message_log'];
-    for (const k of generalKeys) {
-        if (rm[k] !== undefined) h += '<tr><td>' + esc(k) + '</td><td>' + fmtNum(rm[k]) + '</td></tr>';
-    }
+    // General
+    h += '<div class="agent-card"><div class="card-hdr"><h4>📊 General</h4></div><table class="metrics-table">';
+    ['negotiation_terminal_is_success','negotiation_terminal_is_timeout','negotiation_terminal_is_failure',
+     'negotiation_macro_steps_used','negotiation_n_session_log','negotiation_n_action_log','negotiation_n_message_log'].forEach(k => {
+        if (rm[k]!==undefined) h += '<tr><td>'+esc(k)+'</td><td>'+fmtNum(rm[k])+'</td></tr>';
+    });
     h += '</table></div>';
 
-    // Cash & resources
-    h += '<div class="agent-card"><h4>Financial</h4>';
-    h += '<table class="metrics-table">';
-    const finKeys = Object.keys(rm).filter(k => k.includes('cash') || k.includes('profit') || k.includes('solvency') || k.includes('liquidity'));
-    for (const k of finKeys) {
-        if (rm[k] !== undefined) h += '<tr><td>' + esc(k) + '</td><td>' + fmtNum(rm[k]) + '</td></tr>';
+    // Financial
+    const finKeys = Object.keys(rm).filter(k => k.includes('cash')||k.includes('profit')||k.includes('solvency')||k.includes('liquidity'));
+    if (finKeys.length) {
+        h += '<div class="agent-card"><div class="card-hdr"><h4>💰 Financial</h4></div><table class="metrics-table">';
+        finKeys.forEach(k => { h += '<tr><td>'+esc(k)+'</td><td>'+fmtNum(rm[k])+'</td></tr>'; });
+        h += '</table></div>';
     }
-    h += '</table></div>';
 
-    // Contract & predefined rule
-    h += '<div class="agent-card"><h4>Contract &amp; Rules</h4>';
-    h += '<table class="metrics-table">';
-    const contractKeys = Object.keys(rm).filter(k => k.includes('contract') || k.includes('predefined_rule'));
-    for (const k of contractKeys) {
-        if (rm[k] !== undefined) h += '<tr><td>' + esc(k) + '</td><td>' + fmtNum(rm[k]) + '</td></tr>';
+    // Contract & rules
+    const ctKeys = Object.keys(rm).filter(k => k.includes('contract')||k.includes('predefined_rule'));
+    if (ctKeys.length) {
+        h += '<div class="agent-card"><div class="card-hdr"><h4>📝 Contract &amp; Rules</h4></div><table class="metrics-table">';
+        ctKeys.forEach(k => { h += '<tr><td>'+esc(k)+'</td><td>'+fmtNum(rm[k])+'</td></tr>'; });
+        h += '</table></div>';
     }
-    h += '</table></div>';
 
-    // Final state score components
+    // Final state components
     const fsKeys = Object.keys(rm).filter(k => k.startsWith('negotiation_final_state_score_component_'));
     if (fsKeys.length) {
-        h += '<div class="agent-card"><h4>Final State Score Components</h4>';
-        h += '<table class="metrics-table">';
-        for (const k of fsKeys) {
-            h += '<tr><td>' + esc(k.replace('negotiation_final_state_score_component_', '')) + '</td><td>' + fmtNum(rm[k]) + '</td></tr>';
-        }
+        h += '<div class="agent-card"><div class="card-hdr"><h4>🧩 Score Components</h4></div><table class="metrics-table">';
+        fsKeys.forEach(k => { h += '<tr><td>'+esc(k.replace('negotiation_final_state_score_component_',''))+'</td><td>'+fmtNum(rm[k])+'</td></tr>'; });
         h += '</table></div>';
     }
 
@@ -364,31 +587,446 @@ function buildMetrics(overall) {
     return h;
 }
 
-function switchTab(evt, tabName) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    evt.target.classList.add('active');
-    const tabEl = document.getElementById('tab-' + tabName);
-    if (tabEl) tabEl.classList.add('active');
+// ===== Start new run =====
+let activeRunId = null;
+
+async function startNewRun() {
+    const apiBase = document.getElementById('cfgApiBase').value.trim();
+    const apiKey = document.getElementById('cfgApiKey').value.trim();
+    const agentModel = document.getElementById('cfgAgentModel').value.trim();
+    const evalModel = document.getElementById('cfgEvalModel').value.trim();
+    if (!agentModel) { alert('Please enter an agent model'); return; }
+
+    const modelPrefix = apiBase ? 'custom/' : '';
+    const modelSuffix = apiBase ? '@' + apiBase : '';
+    const agentModelFull = modelPrefix + agentModel + modelSuffix;
+    const evalModelFull = modelPrefix + evalModel + modelSuffix;
+
+    const scenarioPk = document.getElementById('cfgScenario').value;
+    const config = {
+        agent_models: [agentModelFull],
+        evaluator_model: evalModelFull,
+        num_participants: parseInt(document.getElementById('cfgNumParts').value),
+        repeats: parseInt(document.getElementById('cfgRepeats').value) || 1,
+        batch_size: parseInt(document.getElementById('cfgBatchSize').value) || 3,
+        api_base: apiBase,
+        api_key: apiKey,
+        scenario_pks: scenarioPk ? [scenarioPk] : null,
+    };
+
+    const btn = document.getElementById('btnStartRun');
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting...';
+
+    try {
+        const resp = await apiPost('/api/run/start', config);
+        if (resp.error) { alert(resp.error); btn.disabled=false; btn.textContent='▶ Start Run'; return; }
+        activeRunId = resp.run_id;
+        // Render live view in the RIGHT main area
+        renderLiveView(resp.run_id);
+        document.getElementById('btnStopRun').classList.remove('hidden');
+        pollProgressLive(resp.run_id);
+    } catch (e) {
+        alert('Failed to start: ' + e);
+        btn.disabled = false;
+        btn.textContent = '▶ Start Run';
+    }
 }
 
-function fmtNum(v) {
-    if (v == null) return 'n/a';
-    if (typeof v === 'number') {
-        if (Number.isInteger(v)) return String(v);
-        return v.toFixed(4);
+function renderLiveView(runId) {
+    const main = document.getElementById('main');
+    main.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <h3 style="color:#58a6ff;">🔴 Live Evaluation — Run <code style="font-size:12px;color:#8b949e;">${esc(runId)}</code></h3>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-secondary" id="btnPauseRun" onclick="togglePause()">⏸ Pause</button>
+                <button class="btn btn-secondary hidden" id="btnStopRun" onclick="stopLiveRun()">⏹ Stop</button>
+            </div>
+        </div>
+        <div id="liveStatusBar" style="margin-bottom:12px;color:#8b949e;font-size:13px;">
+            <span class="spinner"></span> Starting evaluation...
+        </div>
+        <div class="progress-bar-wrap" style="margin-bottom:16px;">
+            <div class="progress-bar" id="liveMainBar" style="width:0%;"></div>
+        </div>
+        <div class="score-grid" style="margin-bottom:16px;">
+            <div class="agent-card" style="grid-column:1/-1;">
+                <div class="card-hdr"><h4>📋 Episodes</h4></div>
+                <div id="liveMainEpList"></div>
+            </div>
+        </div>
+        <div class="score-grid" style="margin-bottom:16px;">
+            <div class="agent-card" style="grid-column:1/-1;">
+                <div class="card-hdr"><h4>🤖 Model Outputs</h4></div>
+                <div id="liveMainOutputs" style="font-size:12px;"></div>
+            </div>
+        </div>
+        <div class="score-grid">
+            <div class="agent-card" style="grid-column:1/-1;" id="liveMainConvCard">
+                <div class="card-hdr"><h4>💬 Conversation</h4></div>
+                <div id="liveMainConv" style="color:#8b949e;">Waiting for episode to complete...</div>
+            </div>
+        </div>
+    `;
+    isPaused = false;
+}
+
+let isPaused = false;
+let pausePollTimer = null;
+
+async function togglePause() {
+    if (!activeRunId) return;
+    const btn = document.getElementById('btnPauseRun');
+    if (!isPaused) {
+        // Pause
+        try { await apiPost('/api/run/pause/' + activeRunId, {}); } catch(e) {}
+        isPaused = true;
+        btn.textContent = '▶ Resume';
+        btn.style.background = '#d2991d';
+        btn.style.color = '#000';
+        if (pausePollTimer) clearTimeout(pausePollTimer);
+        document.getElementById('liveStatusBar').innerHTML = '<span style="color:#d2991d;">⏸ Paused</span>';
+    } else {
+        // Resume
+        try { await apiPost('/api/run/resume/' + activeRunId, {}); } catch(e) {}
+        isPaused = false;
+        btn.textContent = '⏸ Pause';
+        btn.style.background = '';
+        btn.style.color = '';
+        document.getElementById('liveStatusBar').innerHTML = '<span class="spinner"></span> Resuming...';
+        pollProgressLive(activeRunId);
     }
+}
+
+async function pollProgressLive(runId) {
+    try {
+        const status = await apiGet('/api/run/progress/' + runId);
+        // Update status bar
+        const sb = document.getElementById('liveStatusBar');
+        if (sb) sb.innerHTML = status.status === 'running'
+            ? '<span class="spinner"></span> ' + esc(status.message || 'Running...')
+            : status.status === 'done'
+            ? '<span style="color:#3fb950;">✅ ' + esc(status.message || 'Complete') + '</span>'
+            : '<span style="color:#f85149;">❌ ' + esc(status.message || 'Failed') + '</span>';
+
+        // Update progress bar
+        const total = status.total || 0;
+        const done = status.done || 0;
+        const pct = total > 0 ? (done/total*100).toFixed(0) : 0;
+        const bar = document.getElementById('liveMainBar');
+        if (bar) bar.style.width = pct + '%';
+
+        // Update episode list
+        const eps = status.episodes || [];
+        const el = document.getElementById('liveMainEpList');
+        if (el) {
+            el.innerHTML = eps.map(ep => {
+                const ti = termIcon(ep.terminal);
+                const tc = termClass(ep.terminal);
+                const hasConv = ep.has_conversation ? ' style="cursor:pointer;color:#58a6ff;"' : '';
+                return '<div class="live-ep"'+(ep.has_conversation?' onclick="viewLiveConvMain(\''+runId+'\','+ep.seq+')"':'')+'>'+
+                    '<span class="ep-seq">#'+(ep.seq!=null?ep.seq:'?')+'</span>'+
+                    agentAvatarEl(ep.agent_role||'agent','avatar-sm')+
+                    '<span style="flex:1;font-size:12px;">'+esc(ep.agent_model||'')+ (ep.scenario?' · '+esc(ep.scenario):'') +'</span>'+
+                    (ep.has_conversation?'<span style="font-size:11px;color:#58a6ff;cursor:pointer;">💬</span>':'')+
+                    (ep.terminal?'<span class="badge '+tc+'">'+ti+' '+esc(ep.terminal)+'</span>':'<span class="spinner"></span>')+
+                    '</div>';
+            }).join('') || '<span style="color:#8b949e;font-size:12px;">No episodes completed yet</span>';
+        }
+
+        // Update model outputs
+        const outputs = status.model_outputs || [];
+        const outDiv = document.getElementById('liveMainOutputs');
+        if (outDiv && outputs.length) {
+            outDiv.innerHTML = outputs.slice(-30).map(o => renderModelOutput(o)).join('');
+        }
+
+        // Update conversation
+        if (status.latest_conversation) {
+            const convDiv = document.getElementById('liveMainConv');
+            if (convDiv) {
+                convDiv.innerHTML = renderConversationTimeline(status.latest_conversation);
+            }
+        }
+
+        if (status.status === 'running') {
+            setTimeout(() => pollProgressLive(runId), 2000);
+        } else {
+            // Done or failed - re-enable button
+            document.getElementById('btnStartRun').disabled = false;
+            document.getElementById('btnStartRun').textContent = '▶ Start Run';
+            document.getElementById('btnStopRun').classList.add('hidden');
+            if (status.status === 'done') {
+                setTimeout(refreshRuns, 1000);
+            }
+        }
+    } catch (e) {
+        setTimeout(() => pollProgressLive(runId), 3000);
+    }
+}
+
+async function stopLiveRun() {
+    activeRunId = null;
+    document.getElementById('btnStartRun').disabled = false;
+    document.getElementById('btnStartRun').textContent = '▶ Start Run';
+    document.getElementById('btnStopRun').classList.add('hidden');
+    document.getElementById('main').innerHTML = '<div class="empty-state"><p>Run stopped. Select a completed run to view results.</p></div>';
+    refreshRuns();
+}
+
+async function viewLiveConvMain(runId, seq) {
+    const resp = await apiGet('/api/conversation/' + runId + '/' + seq);
+    const convDiv = document.getElementById('liveMainConv');
+    if (convDiv && resp.conversation) {
+        convDiv.innerHTML = renderConversationTimeline(resp.conversation);
+    }
+}
+
+// Old pollProgress kept for sidebar fallback if needed
+async function pollProgress(runId) {
+    // Redirect to main view
+    pollProgressLive(runId);
+}
+
+async function viewCompletedConversation(runId, seq) {
+    const resp = await apiGet('/api/conversation/' + runId + '/' + seq);
+    showConversationModal(runId, seq, resp);
+}
+
+function showConversationModal(runId, seq, resp) {
+    const main = document.getElementById('main');
+    if (resp.conversation) {
+        main.innerHTML = '<div style="margin-bottom:12px;">'+
+            '<button class="btn btn-secondary" onclick="if(currentDetail)renderRunDetail(currentDetail);else{document.getElementById(\'main\').innerHTML=\'<div class=\\\'empty-state\\\' id=\\\'mainEmpty\\\'><p>Select a run to view details</p></div>\';}">← 返回</button>'+
+            '</div>'+
+            '<h3 style="margin-bottom:12px;">💬 Episode #'+seq+' Conversation</h3>'+
+            renderConversationTimeline(resp.conversation);
+        if (document.getElementById('mainEmpty')) document.getElementById('mainEmpty').classList.add('hidden');
+    } else {
+        main.innerHTML = '<div class="empty-state"><p>📭 No conversation data available for this episode.<br><small>Conversation data requires execution record writing enabled during the run.</small></p>'+
+            '<br><button class="btn btn-secondary" onclick="if(currentDetail)renderRunDetail(currentDetail);else{location.reload();}">← 返回</button></div>';
+    }
+}
+
+// ===== Utilities =====
+function switchTab(evt, tabName) {
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    evt.target.classList.add('active');
+    const el = document.getElementById('tab-'+tabName);
+    if (el) el.classList.add('active');
+}
+function fmtNum(v) {
+    if (v==null) return 'n/a';
+    if (typeof v==='number') return Number.isInteger(v) ? String(v) : v.toFixed(4);
     return String(v);
 }
+function esc(s) { const d=document.createElement('div');d.textContent=String(s);return d.innerHTML; }
 
-function esc(s) {
-    const div = document.createElement('div');
-    div.textContent = String(s);
-    return div.innerHTML;
+// ===== Model output rendering =====
+let _outputIdSeq = 0;
+function renderModelOutput(o) {
+    const agentName = o.agent || '?';
+    const oid = 'out_' + (_outputIdSeq++);
+    let body = '';
+    if (o.parsed && typeof o.parsed === 'object') {
+        const actionType = o.parsed.action_type || '';
+        const arg = o.parsed.argument || {};
+        let argPreview = '';
+        if (typeof arg === 'object' && arg !== null) {
+            if (actionType === 'speak' && arg) {
+                const speakText = typeof arg === 'string' ? arg : (arg.argument || arg.text || arg.message || '');
+                argPreview = speakText ? ' <span style="color:#e1e4e8;">💬 '+esc(String(speakText))+'</span>' : '';
+            } else if (actionType === 'action' && arg) {
+                const op = arg.negotiation_op || '';
+                const purpose = arg.purpose || '';
+                argPreview = op ? ' <span style="color:#3fb950;">'+esc(op)+'</span>' : '';
+                argPreview += purpose ? ' <span style="color:#8b949e;font-size:11px;"> — '+esc(purpose)+'</span>' : '';
+                const extra = Object.entries(arg).filter(([k]) => !['negotiation_op','purpose'].includes(k));
+                if (extra.length) {
+                    argPreview += ' <span style="color:#484f58;font-size:10px;">' + extra.map(([k,v]) => esc(k)+'='+esc(JSON.stringify(v))).join(', ') + '</span>';
+                }
+            } else if (actionType === 'leave') {
+                argPreview = ' <span style="color:#f85149;">🚪 Left</span>';
+            } else if (actionType === 'none') {
+                argPreview = ' <span style="color:#484f58;">—</span>';
+            } else if (arg) {
+                argPreview = ' <span style="color:#8b949e;font-size:11px;">'+esc(JSON.stringify(arg).slice(0, 200))+'</span>';
+            }
+        }
+        const aColors = {speak:'#79c0ff', action:'#a371f7', leave:'#f85149', none:'#484f58'};
+        const aIcon = {speak:'💬', action:'⚡', leave:'🚪', none:'⏸️'};
+        const ac = aColors[actionType] || '#8b949e';
+        const ai = aIcon[actionType] || '';
+        body = '<span style="color:'+ac+';">'+ai+' <b>'+esc(actionType)+'</b></span>' + argPreview;
+    } else if (o.raw) {
+        body = '<span style="font-size:11px;color:#c9d1d9;">'+esc(o.raw.slice(0, 250))+'</span>';
+    } else {
+        body = '<span style="color:#8b949e;">(empty output)</span>';
+    }
+
+    // Build prompt+response detail (hidden by default)
+    const hasDetail = o.prompt || o.raw;
+    const detailHtml = hasDetail ? `
+    <div id="${oid}_detail" class="hidden" style="margin-top:8px;padding:10px;background:#0f1117;border-radius:6px;font-size:12px;">
+        ${o.prompt ? '<div style="margin-bottom:8px;"><div style="color:#58a6ff;font-weight:600;margin-bottom:4px;">📥 Prompt</div><pre style="white-space:pre-wrap;word-break:break-word;color:#c9d1d9;">'+esc(o.prompt)+'</pre></div>' : ''}
+        ${o.raw ? '<div><div style="color:#3fb950;font-weight:600;margin-bottom:4px;">📤 Response</div><pre style="white-space:pre-wrap;word-break:break-word;color:#c9d1d9;">'+esc(o.raw)+'</pre></div>' : ''}
+    </div>` : '';
+
+    return '<div class="live-ep" style="font-size:11px;padding:6px 10px;cursor:pointer;" onclick="var d=document.getElementById(\''+oid+'_detail\');if(d)d.classList.toggle(\'hidden\');">'+
+        '<span style="min-width:30px;color:#484f58;">#'+(o.step||'?')+'</span>'+
+        agentAvatarEl(agentName, 'avatar-sm')+
+        '<span style="font-weight:600;min-width:70px;font-size:11px;">'+esc(agentName)+'</span>'+
+        '<span style="flex:1;">'+body+'</span>'+
+        (hasDetail ? '<span style="color:#58a6ff;font-size:10px;">▶</span>' : '')+
+        '</div>' + detailHtml;
+}
+
+// ===== Conversation rendering =====
+function renderConversationTimeline(conv) {
+    if (!conv) return '<p>No conversation data</p>';
+    let h = '';
+
+    // Agent legend
+    const agents = conv.agents || [];
+    if (agents.length) {
+        h += '<div class="legend">';
+        agents.forEach(a => {
+            h += '<div class="legend-item">'+agentAvatarEl(a,'avatar-sm')+' '+esc(a)+'</div>';
+        });
+        h += '</div>';
+    }
+
+    // Summary stats
+    h += '<div class="score-grid" style="margin-bottom:16px;">';
+    h += '<div class="agent-card"><div class="card-hdr"><h4>📊 Summary</h4></div>';
+    h += '<div class="dim-row"><span class="dim-name">Terminal</span><div class="dim-bar-wrap"></div><span class="dim-val"><span class="badge '+termClass(conv.terminal)+'">'+termIcon(conv.terminal)+' '+esc(conv.terminal)+'</span></span></div>';
+    h += '<div class="dim-row"><span class="dim-name">Scheduling entries</span><div class="dim-bar-wrap"></div><span class="dim-val">'+(conv.scheduling||[]).length+'</span></div>';
+    h += '<div class="dim-row"><span class="dim-name">Sessions</span><div class="dim-bar-wrap"></div><span class="dim-val">'+(conv.sessions||[]).length+'</span></div>';
+    h += '<div class="dim-row"><span class="dim-name">Contracts</span><div class="dim-bar-wrap"></div><span class="dim-val">'+(conv.contracts||[]).length+'</span></div>';
+    h += '</div></div>';
+
+    // Contracts
+    if ((conv.contracts||[]).length) {
+        h += '<div class="section"><div class="section-hdr" onclick="this.parentElement.querySelector(\'.section-body\').classList.toggle(\'hidden\')"><span>📝 Contracts ('+conv.contracts.length+')</span></div>';
+        h += '<div class="section-body">';
+        conv.contracts.forEach(c => {
+            h += '<div class="contract-card"><div class="ctr-title">📝 Contract</div>';
+            h += '<div style="font-size:12px;white-space:pre-wrap;">'+esc(JSON.stringify(c, null, 2))+'</div>';
+            h += '</div>';
+        });
+        h += '</div></div>';
+    }
+
+    // Sessions — each in its own box
+    const sessions = conv.sessions || [];
+    if (sessions.length) {
+        h += '<div style="margin-bottom:12px;font-weight:600;font-size:14px;color:#58a6ff;">💬 Sessions ('+sessions.length+')</div>';
+        h += '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(420px, 1fr));gap:12px;">';
+        sessions.forEach((sess, si) => {
+            const hasTranscripts = (sess.transcripts||[]).length > 0;
+            const reasonLabels = {
+                'scheduling_yielded_no_session': '⏭ No meeting formed',
+                'session_completed_normally': '✅ Session completed',
+                'max_turns_reached': '⏰ Max turns',
+                'agent_left': '🚪 Agent left',
+            };
+            const reasonLabel = reasonLabels[sess.reason] || sess.reason;
+            const boxColor = hasTranscripts ? '#3fb95044' : '#30363d';
+            h += '<div style="background:#21262d;border:1px solid '+boxColor+';border-radius:10px;overflow:hidden;">';
+            // Session header
+            h += '<div style="background:#1c2128;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+            h += '<div style="display:flex;align-items:center;gap:8px;">';
+            h += '<span style="font-size:16px;">'+(hasTranscripts?'🗣️':'📅')+'</span>';
+            h += '<span style="font-weight:600;font-size:13px;">Day '+sess.day+' · Slot '+sess.slot+'</span>';
+            h += '</div>';
+            h += '<div style="display:flex;align-items:center;gap:6px;">';
+            if (reasonLabel) h += '<span style="font-size:11px;color:#8b949e;">'+esc(reasonLabel)+'</span>';
+            if (hasTranscripts) h += '<span class="badge badge-success" style="font-size:10px;">💬 chat</span>';
+            else h += '<span class="badge badge-timeout" style="font-size:10px;">⏭ empty</span>';
+            h += '</div></div>';
+
+            // Session body
+            if (hasTranscripts) {
+                h += '<div style="padding:10px;">';
+                sess.transcripts.forEach(ts => {
+                    const messages = ts.transcript || (ts.speaker ? [ts] : []);
+                    if (!messages.length) return;
+
+                    if (ts.session_id) {
+                        h += '<div style="padding:4px 12px;font-size:11px;color:#58a6ff;background:#0f1117;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">';
+                        h += '<span>🔗 Session '+esc(ts.session_id||'')+'</span>';
+                        h += '<span style="color:#8b949e;">· '+(ts.participants||[]).map(p => esc(p)).join(', ')+'</span>';
+                        h += '</div>';
+                    }
+
+                    messages.forEach((msg, mi) => {
+                        const speaker = msg.speaker || msg.agent || msg.role || '?';
+                        const text = msg.message || msg.content || msg.text || JSON.stringify(msg);
+                        const isLeft = mi % 2 === 0;
+                        h += '<div class="chat-msg'+(isLeft?'':' msg-right')+'">';
+                        h += agentAvatarEl(speaker, 'avatar-sm');
+                        h += '<div class="bubble">';
+                        h += '<div class="bbl-sender">'+esc(speaker)+'</div>';
+                        h += '<div class="bbl-text">'+esc(text)+'</div>';
+                        h += '</div></div>';
+                    });
+
+                    // Contracts
+                    const ctrs = ts.contracts || [];
+                    ctrs.forEach(c => {
+                        h += '<div class="contract-card"><div class="ctr-title">📝 Contract</div>';
+                        h += '<div style="font-size:11px;">'+esc(JSON.stringify(c))+'</div></div>';
+                    });
+                });
+                h += '</div>';
+            } else {
+                h += '<div style="padding:14px;color:#484f58;font-size:12px;text-align:center;">No conversation in this slot</div>';
+            }
+            h += '</div>';
+        });
+        h += '</div>';
+    }
+
+    // Scheduling timeline (collapsed by default for large logs)
+    const scheduling = conv.scheduling || [];
+    if (scheduling.length) {
+        h += '<div class="section"><div class="section-hdr" onclick="this.parentElement.querySelector(\'.section-body\').classList.toggle(\'hidden\')"><span>📅 Scheduling ('+scheduling.length+' entries)</span></div>';
+        h += '<div class="section-body"><div class="timeline">';
+        scheduling.forEach(e => {
+            h += '<div class="tl-entry evt-sched">';
+            h += '<div class="tl-icon">📅</div>';
+            h += '<div class="tl-body">';
+            h += '<div class="tl-meta">Day '+e.day+' · Slot '+e.slot+'</div>';
+            h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'+agentAvatarEl(e.agent,'avatar-sm')+'<span class="entry-agent">'+esc(e.agent)+'</span></div>';
+            h += '<div class="tl-content">'+esc(e.action)+'</div>';
+            h += '</div></div>';
+        });
+        h += '</div></div></div>';
+    }
+
+    return h;
+}
+
+// ===== Load scenarios =====
+async function loadScenarios() {
+    try {
+        const scenarios = await apiGet('/api/scenarios');
+        const sel = document.getElementById('cfgScenario');
+        // Keep default option
+        sel.innerHTML = '<option value="">None — use default params</option>';
+        scenarios.forEach(s => {
+            const label = (s.codename || s.pk || '?').slice(0, 60);
+            sel.innerHTML += '<option value="'+esc(s.pk||label)+'">'+esc(label)+(s.num_participants?' ('+s.num_participants+'p)':'')+'</option>';
+        });
+    } catch (e) {
+        // scenarios unavailable — that's OK
+    }
 }
 
 // Init
-loadRuns();
+refreshRuns();
+loadScenarios();
 </script>
 </body>
 </html>

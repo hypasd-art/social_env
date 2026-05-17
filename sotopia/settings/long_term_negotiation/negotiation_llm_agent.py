@@ -33,127 +33,115 @@ from .roles import ROLE_PERSONA_EN, ROLE_SUMMARY_EN, default_display_name_for_ro
 
 # 与 ``agenerate_action`` 默认模板变量一致：由 ``agenerate`` 注入 goal / format_instructions 等。
 NEGOTIATION_LLM_CUSTOM_TEMPLATE = """
-You are **{agent}** in a long-horizon negotiation simulator (calendar slots + structured JSON moves).
+You are **{agent}** in a long-horizon multi-party negotiation simulator. Your task is to produce exactly ONE valid move for the current turn. The latest Environment message is the only authoritative source and overrides all prior history, plans, or inferred strategies.
 
-## Authority stack (higher wins)
-1. **Latest Environment message** in the history block: phase, allowed moves, literal JSON examples for **this** turn — follow it mechanically.
-2. **Live state in that message** (`[system]`, contracts, session bookkeeping): current numbers and legality; overrides stale narrative.
-3. **Private block at the end** (section titled ``Here is the context of the interaction`` below): `[persona]`, DialogueVoice, `[agent_design_digest]`, `[design_economics]`, loaded profiles / relationships — use for **voice, motives, stance** only; never contradict (1–2).
-4. **Role & roster** bullets below — hints only.
+Treat the live state as ground truth, including `[system]`, visible contracts, active offers, session/bookkeeping state, participant availability, and all legality constraints. Do not rely on stale or conflicting historical information.
 
-## Visibility
-- `[system]` / `[contracts_visible_to_you]` = your view only.
-- `[other_participants_public_role]` = public one-liners; **not** their private cash, thresholds, or hidden goals.
+The private context may include `[persona]`, `DialogueVoice`, relationship information, and hidden incentives. Use these only to shape tone, style, persuasion, and prioritization, but never to override legality, Environment rules, or current state constraints.
 
-## Persona & voice (from private block)
-- Match **DialogueVoice** / `[persona]` for register, pacing, hedges, and taboos; keep each **speak** short and distinct from other roster members.
-- In **speak**, address people only by **personal names** (as in Environment / roster); never say internal roster codes aloud.
-- In **action** JSON, use the **same personal name strings** as in this turn's Environment examples for any participant fields (`proposed_participants`, `requester`, `receiver`, etc.).
+Visibility rules: `[system]` and `[contracts_visible_to_you]` are private; `[other_participants_public_role]` is public only. Do not infer hidden utilities, budgets, thresholds, or motivations unless explicitly provided in the Environment.
 
-## Action types (choose exactly one; must appear in **{action_list}**)
-- **speak** — `argument`: short in-character text (no JSON).
-- **non-verbal communication** — `argument`: short string.
-- **action** — `argument`: **one** JSON object matching this turn’s Environment (exact `negotiation_op` / `verb` names). No markdown fences; no JSON-as-string.
-- **leave** — only if Environment allows that escape; else use **action** with the described `session_control` / `leave` shape.
-- **none** — only when Environment clearly expects silence; avoid lazy **none** if a move is due.
+You must choose exactly one action type from {action_list}. For `speak`, the argument must be short natural language, in-character, negotiation-focused, and must only use participant names from the Environment. For `non-verbal communication`, the argument must be a short phrase describing a gesture or reaction. For `action`, the argument must be a real JSON object strictly following the Environment schema, using exact field and operation names, without adding or inventing any fields, without schema metadata, and preferring the smallest valid payload. For `leave`, only use it if explicitly allowed. For `none`, only use it when silence is required or no legal move exists.
 
-## JSON discipline (**action** only)
-- Copy token names from the Environment; do not invent ops.
-- Omit unused keys; never paste schema `description` / `type` / `$defs` into `argument`.
-- If two moves are valid, prefer the **smaller** payload that still respects calendars/session caps.
+Behaviorally, maintain long-horizon consistency, prefer realistic negotiation behavior over perfect optimization, avoid repetition, avoid over-explaining, preserve leverage when possible, and keep outputs concise.
 
-## Silent pre-flight (do not print)
-- [ ] `action_type` ∈ **{action_list}**
-- [ ] If **action**: `argument` is a flat JSON object, not a string, not fenced
-- [ ] No schema echo; no extra keys the Environment did not use in its example
+Before responding, silently verify that the chosen action is legal, the output contains exactly one JSON object, there is no markdown or extra text, `action` uses a JSON object (not a string), all fields match Environment examples, and no schema leakage is present.
 
-## Role & roster (supplement)
-{action_instructions}
+Private context: {goal}.
 
---- Interaction history (newest lines matter most) ---
-{history}
+Supplemental role information: {action_instructions}. 
 
---- Turn ---
-**Turn #{turn_number}** · allowed types: **{action_list}**
+Return ONLY one JSON object matching: {format_instructions}
 
---- Private context (read immediately before the schema) ---
-{goal}
+[Scheduling — Invite]
+Submit ONE session_request per slot via action_type='action', e.g.:
+  {"negotiation_op":"session_request","proposed_participants":["Alice","Bob"],"purpose":"discuss delivery"}
+Or pass: {"negotiation_op":"sched_pass"}. Q_i=1: at most one request per slot. No formal budget consumed.
 
-Return **only** one JSON object as specified (no preamble, no markdown outside the value):
-{format_instructions}
+[Scheduling — Response]
+Respond via action_type='action':
+  {"negotiation_op":"session_response","requester":"Alice","accept":true}
+  {"negotiation_op":"session_response_batch","responses":[{"requester":"Alice","accept":true},...]}
+Or {"negotiation_op":"sched_pass"}. Accept at most ONE invite targeting you; others auto-declined.
+
+[Session — speak / action]
+Use action_type='speak' for natural language, or action_type='action' with JSON for formal ops:
+  propose:     {"negotiation_op":"formal","verb":"propose_contract","terms":{price,regulatory_required,financing_required,valuation,payment,closing,compliance,penalty}}
+  accept:      {"negotiation_op":"formal","verb":"accept","contract_id":"optional"}
+  reject:      {"negotiation_op":"formal","verb":"reject_contract","contract_id":"optional"}
+  amend:       {"negotiation_op":"formal","verb":"amend_contract","contract_id":"<parent>","terms":{...}}
+  sign:        {"negotiation_op":"formal","verb":"sign","contract_id":"optional"}
+  share:       {"negotiation_op":"formal","verb":"contract_share","contract_id":"...","receiver":"<name>"}
+  financing:   {"negotiation_op":"formal","verb":"request_financing_review|finance_commit|finance_decline","contract_id":"optional"}
+  regulatory:  {"negotiation_op":"formal","verb":"request_regulatory_review|regulatory_approve|regulatory_block","contract_id":"optional"}
+  terminate:   {"negotiation_op":"terminate_negotiation"}
+  leave:       {"negotiation_op":"session_control","verb":"leave"} or {"negotiation_op":"session_control","verb":"terminate_session"}
+All JSON uses personal names. Only include fields shown in examples.
+
+Interaction history: {history}
 """
 
+# . 
+
+# Current turn: Turn #{turn_number}. 
+
 MULTI_PARTY_NEGOTIATION_SKILL = """
-## Multi-party negotiation skill (MANDATORY — apply every session)
+## Multi-party negotiation skill (MANDATORY — every session)
 
-You are in a multi-party marketplace. Your success depends on actively engaging with
-MULTIPLE counterparties, not fixating on one. The best negotiators shop around.
+You are in a multi-party market. Success requires engaging multiple counterparties in parallel, not focusing on one.
 
-### Core tactics (execute every session):
-1. **Shop around before committing** — Before accepting any offer, communicate with ALL available
-   counterparties to compare terms. Never accept the first offer without checking alternatives.
-2. **Cross-reference offers** — Use information from one party's bid to negotiate better terms
-   with another. Let them know you have alternatives: "Vendor B offered delivery by Tuesday —
-   can you match that?"
-3. **Play rivals against each other** — If two parties compete for the same deal, let each know
-   the other is bidding. Create healthy bidding tension without fabricating fake offers.
-4. **Coalition awareness** — Know who competes with whom. Temporarily ally with one rival to
-   pressure a third. But be ready to switch partners when it benefits your goal.
-5. **Maximize total gain, not just close any deal** — Your goal is the BEST achievable deal
-   across all possible counterparty combinations. Track your BATNA (best alternative to
-   negotiated agreement) across all active counterparties.
-6. **Information arbitrage** — What one party reveals in conversation may give you leverage
-   with another. Use market intelligence strategically, without betraying confidential numbers.
+## Core behavior rules (always apply)
 
-### Role-specific tactics:
-- **Buyer / procurement lead**: Solicit bids from EVERY seller in the roster. Compare total bundles
-  (price + delivery + quality). Make sellers visibly aware they are being compared. Negotiate with
-  at least 2 sellers before committing to any deal.
-- **Incumbent seller / primary vendor**: Remind buyers of your track record vs. unproven challengers.
-  Offer loyalty perks. Consider temporary price coordination with other incumbents to block a
-  challenger from gaining a foothold. Talk to all buyers, not just your regulars.
-- **Challenger seller**: Attack incumbent weaknesses openly. Offer trial periods or money-back
-  guarantees. Undercut on price but upsell on volume commitments. Target the incumbent's most
-  dissatisfied customer first. Talk to every buyer about what they dislike about current suppliers.
-- **Late entrant / specialist**: Identify the weakest link among incumbents. Frame premium quality
-  as insurance against incumbent failures. Don't compete on price alone — compete on trust and
-  reliability. Engage all parties to find the gap no one else is filling.
+1. Shop around first: never accept an offer before contacting at least 2 counterparties; always compare alternatives before committing.
+2. Cross-reference offers: use other parties’ bids to negotiate better terms; you may say “Another vendor offered X — can you match or improve it?” but do not reveal exact private numbers.
+3. Competitive pressure: signal that alternatives exist to create bidding tension without fabricating offers.
+4. Coalition dynamics: form temporary alliances to pressure others and switch when beneficial.
+5. Maximize total value (BATNA-aware): optimize across all counterparties, not single deals; track best alternative agreement.
+6. Information arbitrage: use insights from one party to negotiate with another without disclosing confidential details.
 
-### Business tactics toolkit:
-- **Anchoring**: Open with an aggressive but defensible number to set the negotiation range in your favor.
-- **Concession patterning**: Make each concession smaller than the last. Never give something for nothing —
-  always ask for a reciprocal concession ("If I give you X, I need Y in return").
-- **Deadline leverage**: Use time pressure strategically. If you know a counterparty faces end-of-day costs
-  or inventory spoilage, press for better terms as the window closes.
-- **Bundle vs. unbundle**: Negotiate the full package (price + delivery + quality + penalties) not just price.
-  Concede on low-cost items you don't care about to win on high-value items you do.
-- **Walk-away credibility**: Be willing to walk away — and let the other side see it. A deal you don't need
-  is your strongest bargaining position.
-- **Nibbling**: After the main terms are agreed, ask for small extras ("and include delivery by Tuesday, right?").
-- **Silence as pressure**: After making an offer or counter-offer, stay quiet. Let the other side fill the silence —
-  they often concede first.
+## Role-specific strategy
 
-### Dialogue templates (adapt to your DialogueVoice):
-- **Opening comparison**: "I'm talking to a few vendors today. What's your best offer on [product] so I can
-  compare fairly?"
-- **Cross-referencing**: "Another seller quoted me [X] with [Y] delivery. Can you do better, or should I
-  take their deal?"
-- **Creating urgency**: "I need to close by [timeframe]. If we can agree on terms now, the business is yours.
-  Otherwise I'll need to move on."
-- **Concession exchange**: "I can come up on price if you extend the warranty to 30 days. That's fair for both of us."
-- **Defending against undercut**: "Their price is lower, yes — but last month their delivery was late twice.
-  You're paying for reliability, not just the product."
-- **Building coalition**: "If we both hold firm on [term], the buyer can't play us against each other.
-  There's enough business for both of us if we don't race to the bottom."
-- **Closing the deal**: "We're close. If you can meet me at [final offer], we sign now and I stop talking
-  to the others. Deal?"
+Buyer: contact all sellers, compare bundles (price/delivery/quality), explicitly signal comparison. Incumbent seller: emphasize reliability, loyalty, track record; engage all buyers and defend against challengers. Challenger seller: undercut incumbents, expose weaknesses, offer trials/guarantees, target dissatisfied buyers. Specialist: compete on trust/reliability, identify gaps, engage all parties.
 
-### Anti-patterns (strictly avoid):
-- Do NOT fixate on a single counterparty for the entire session.
-- Do NOT accept a deal without engaging at least 2 alternative counterparties first.
-- Do NOT reveal one party's exact private numbers to another party (use ranges, comparisons,
-  or non-specific hints like "below market" or "more competitive than your quote").
-- Do NOT stay silent while rivals negotiate — be visible, be active, be memorable.
+## Negotiation toolkit
+
+Anchoring: set strong initial offer; Concession patterning: smaller concessions over time with reciprocity; Deadline leverage: exploit urgency; Bundle strategy: negotiate full package not just price; Walk-away power: signal credible exit; Nibbling: ask for small extras after agreement; Silence pressure: use pauses to induce concessions.
+
+## Dialogue templates
+
+Opening: “I’m comparing multiple vendors — what’s your best offer?” Cross-reference: “Another offer is X with Y delivery — can you improve?” Urgency: “Need to close soon — otherwise I’ll move on.” Concession: “I can adjust X if you improve Y.” Reliability: “Lower price, but worse reliability.” Coalition: “If we hold this line, buyers can’t split us.” Close: “If you match this, we sign and I stop negotiating.”
+
+## Anti-patterns
+
+Do not focus on a single counterparty; do not accept before evaluating at least 2 alternatives; do not reveal exact private numbers (use ranges/comparisons); do not remain passive—always engage multiple parties.
+
+"""
+
+AVAILABLE_ACTION_RULES = """
+[Scheduling — Invite]
+Submit ONE session_request per slot via action_type='action', e.g.:
+  {"negotiation_op":"session_request","proposed_participants":["Alice","Bob"],"purpose":"discuss delivery"}
+Or pass: {"negotiation_op":"sched_pass"}. Q_i=1: at most one request per slot. No formal budget consumed.
+
+[Scheduling — Response]
+Respond via action_type='action':
+  {"negotiation_op":"session_response","requester":"Alice","accept":true}
+  {"negotiation_op":"session_response_batch","responses":[{"requester":"Alice","accept":true},...]}
+Or {"negotiation_op":"sched_pass"}. Accept at most ONE invite targeting you; others auto-declined.
+
+[Session — speak / action]
+Use action_type='speak' for natural language, or action_type='action' with JSON for formal ops:
+  propose:     {"negotiation_op":"formal","verb":"propose_contract","terms":{price,regulatory_required,financing_required,valuation,payment,closing,compliance,penalty}}
+  accept:      {"negotiation_op":"formal","verb":"accept","contract_id":"optional"}
+  reject:      {"negotiation_op":"formal","verb":"reject_contract","contract_id":"optional"}
+  amend:       {"negotiation_op":"formal","verb":"amend_contract","contract_id":"<parent>","terms":{...}}
+  sign:        {"negotiation_op":"formal","verb":"sign","contract_id":"optional"}
+  share:       {"negotiation_op":"formal","verb":"contract_share","contract_id":"...","receiver":"<name>"}
+  financing:   {"negotiation_op":"formal","verb":"request_financing_review|finance_commit|finance_decline","contract_id":"optional"}
+  regulatory:  {"negotiation_op":"formal","verb":"request_regulatory_review|regulatory_approve|regulatory_block","contract_id":"optional"}
+  terminate:   {"negotiation_op":"terminate_negotiation"}
+  leave:       {"negotiation_op":"session_control","verb":"leave"} or {"negotiation_op":"session_control","verb":"terminate_session"}
+All JSON uses personal names. Only include fields shown in examples.
 """
 
 
@@ -223,29 +211,24 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
         for n in names:
             if n == self.agent_name:
                 continue
-            desc = ROLE_SUMMARY_EN.get(n, n)
             label = self._canonical_display_names.get(n, n)
-            lines.append(f"  - {label}: {desc}")
+            lines.append(f"  - {label}")
         if not lines:
             return ""
         return "[other_participants_public_role]\n" + "\n".join(lines)
 
     def _action_instruction_block(self, obs: Observation) -> str:
-        role_line = ROLE_SUMMARY_EN.get(self.agent_name, self.agent_name)
         me = self._prompt_self_label()
         extra = self._role_goal_addon.strip()
         parts = [
-            f"- You are **{me}** in this simulator (others address you by this name in **speak**).",
-            f"- Role summary (your side): {role_line}",
+            f"- You are **{me}** and others address you by this name in **speak**.",
         ]
         if self._all_participant_names:
             roster_nl = ", ".join(
                 self._canonical_display_names.get(n, n) for n in self._all_participant_names
             )
             parts.append(f"- People in this episode: {roster_nl}")
-        parts.append(
-            "- **Structured JSON:** copy participant **name strings** exactly from this turn's Environment examples."
-        )
+        
         parts.append(
             "- **Persona / voice / digest:** see the **Private context** section at the end of this message "
             "(`[persona]`, DialogueVoice, `[agent_design_digest]`, profile/relationship blocks when present). "
@@ -258,7 +241,7 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
             parts.append(f"- Scenario-specific goal / constraints: {extra}")
         if obs.action_instruction.strip():
             parts.append(
-                "- Environment ``action_instruction`` (high-priority hint for this observation): "
+                "- Environment ``action_instruction``: "
                 f"{obs.action_instruction.strip()}"
             )
         return "\n".join(parts)
@@ -326,16 +309,26 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
                 econ.append(f"DialogueVoice (full): {truncate_chars(dv, 900)}")
             lines.append("\n".join(econ))
 
-        anchor = ROLE_SUMMARY_EN.get(self.agent_name, "").strip()
-        if anchor:
-            lines.append(f"Role summary (repeat): {anchor}")
-
         body = "\n\n".join(lines)
         return truncate_chars(body, 4500) if len(body) > 4500 else body
+
+    async def get_goal_context(self) -> str:
+        """返回当前回合的完整私有上下文（goal + 记忆 + 人设摘要），供 env 注入 observation 的 [system] 块。"""
+        parts: list[str] = []
+        if self._goal:
+            parts.append(self._goal)
+        mem_block = await self.memory.arecent(self.memory_inject_lines)
+        if mem_block:
+            parts.append("[Recent episode memory]\n" + mem_block)
+        digest = self._agent_design_digest_footer()
+        if digest:
+            parts.append(digest)
+        return "\n\n".join(parts)
 
     async def aact(self, obs: Observation) -> AgentAction:
         self.recv_message("Environment", obs)
         if self._goal is None:
+            breakpoint()
             obs_nl = self._rewrite_nl_for_prompt(self.inbox[0][1].to_natural_language())
             viewer_ctx = self._action_instruction_block(obs)
             self._goal = await agenerate_goal(
@@ -356,21 +349,22 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
         if len(obs.available_actions) == 1 and "none" in obs.available_actions:
             return AgentAction(action_type="none", argument="", to=[])
 
-        mem_block = await self.memory.arecent(self.memory_inject_lines)
+        # mem_block = await self.memory.arecent(self.memory_inject_lines)
         goal_effective = self._goal
-        if mem_block:
-            goal_effective = (
-                (self._goal or "")
-                + "\n\n[Recent episode memory — use for long-horizon consistency]\n"
-                + mem_block
-            )
+        # if mem_block:
+        #     goal_effective = (
+        #         (self._goal or "")
+        #         + "\n\n[Recent episode memory]\n"
+        #         + mem_block
+        #     )
         digest = self._agent_design_digest_footer()
         if digest:
-            goal_effective = (goal_effective or "").rstrip() + "\n\n" + digest
+            goal_effective = (goal_effective or "").rstrip() + "\n\n" #  + digest
 
         custom_template = fill_template(
             self._negotiation_prompt_template,
             action_instructions=self._action_instruction_block(obs),
+
         )
 
         # ``agenerate_action`` / ``AgentAction`` 校验 ``to`` 时要求收件人 ∈ context.agent_names。
@@ -387,7 +381,7 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
         agent_names_nl = sorted(frozenset(rk) | frozenset(_labels))
 
         raw_history = "\n".join(f"{y.to_natural_language()}" for _, y in self.inbox)
-        history = self._rewrite_nl_for_prompt(raw_history)
+        history = self._rewrite_nl_for_prompt(raw_history) # 序列化后经 _rewrite_nl_for_prompt 将 canonical 名称（firm_a）替换为显示名（Avery Singh）
 
         action = await agenerate_action(
             self.model_name,
@@ -448,7 +442,6 @@ def build_negotiation_social_llm_agents(
             canonical_display_names=disp_map,
             **mem_kw,
         )
-        summary = ROLE_SUMMARY_EN.get(role, role)
         persona = dict(ROLE_PERSONA_EN.get(role, {}))
         voice = str(persona.get("dialogue_voice", "") or "").strip()
         chunks = [
@@ -464,26 +457,24 @@ def build_negotiation_social_llm_agents(
                 f"AchievementMotivation={persona.get('achievement_motivation', '')}",
             ]
         )
-        persona_line = "; ".join(chunks)
+        persona_line = "\n".join(["- " + x for x in chunks])
         design_econ: list[str] = []
         if "daily_fixed_cost" in persona:
             design_econ.append(f"daily_fixed_cost={persona['daily_fixed_cost']}")
         if "short_term_debt_due" in persona:
             design_econ.append(f"short_term_debt_due={persona['short_term_debt_due']}")
-        econ_line = ("\n[design_economics] " + "; ".join(design_econ)) if design_econ else ""
+        econ_line = ("\ndesign_economics:\n " + "\n- ".join(design_econ)) if design_econ else ""
         label = disp_map.get(role, default_display_name_for_role(role))
         ag.goal = (
-            f"[you] {label}\n"
-            f"[role_summary] {summary}\n"
-            f"[persona] {persona_line}{econ_line}\n"
+            # f"[you] {label}\n"
+            f"persona:\n{persona_line}\n\n\n{econ_line}\n"
             "[protocol_discipline]\n"
             "- Each turn: read the **latest** Environment message for allowed `action_type` values and JSON shapes.\n"
             "- For `action`: `argument` must be one JSON object matching that message (not a stringified JSON blob, "
             "not markdown fences).\n"
             "- Reuse exact `negotiation_op` / `verb` tokens from the Environment; do not invent op names.\n"
             "- Respect calendars, session caps, and scheduling rules; advance your interests without hallucinating "
-            "others' private numbers unless visible under `[contracts_visible_to_you]` or said in-session."
-            f"\n\n{MULTI_PARTY_NEGOTIATION_SKILL}"
+            # f"\n\n{MULTI_PARTY_NEGOTIATION_SKILL}"
         )
         agents[role] = ag
     return agents

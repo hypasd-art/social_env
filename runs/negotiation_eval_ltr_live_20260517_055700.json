@@ -1,0 +1,275 @@
+{
+  "run_started_at": "2026-05-17 05:57:00",
+  "run_timestamp": "20260517_055700",
+  "tag": "ltr_live",
+  "agent_models": [
+    "custom/deepseek-v4-flash@https://api.deepseek.com"
+  ],
+  "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+  "aggregate_means": {
+    "overall": {
+      "n_episodes": 1,
+      "terminal_success_rate": 0.0,
+      "rule_metrics_mean": {
+        "negotiation_final_state_day_closed": 4.0,
+        "negotiation_final_state_min_cash": 306.0,
+        "negotiation_final_state_n_snapshots": 4.0,
+        "negotiation_final_state_n_solvent": 3.0,
+        "negotiation_final_state_score": 0.18,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.18,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_final_state_total_cash": 1044.0,
+        "negotiation_final_state_total_cash_delta": -136.0,
+        "negotiation_macro_steps_used": 21.0,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_n_session_log": 6.0,
+        "negotiation_participant_mean_cash": 348.0,
+        "negotiation_participant_min_cash": 306.0,
+        "negotiation_predefined_rule_buyer_savings_per_unit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_ratio": 0.0,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_contract_value": 375000000.0,
+        "negotiation_predefined_rule_cost_price": 157.0021229631515,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_news_signal": -0.13695766399613274,
+        "negotiation_predefined_rule_payout_mode_v2_buy_sell": 1.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_realized_price": 0.0,
+        "negotiation_predefined_rule_reference_price": 220.56444408304276,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_predefined_rule_seller_earnings_per_unit": 0.0,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_visible_history_total_lines": 0.0
+      }
+    },
+    "by_model": {
+      "custom/deepseek-v4-flash@https://api.deepseek.com": {
+        "model_display": "deepseek-v4-flash",
+        "model_full": "custom/deepseek-v4-flash@https://api.deepseek.com",
+        "n_episodes": 1,
+        "terminal_success_rate": 0.0,
+        "rule_metrics_mean": {
+          "negotiation_final_state_day_closed": 4.0,
+          "negotiation_final_state_min_cash": 306.0,
+          "negotiation_final_state_n_snapshots": 4.0,
+          "negotiation_final_state_n_solvent": 3.0,
+          "negotiation_final_state_score": 0.18,
+          "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+          "negotiation_final_state_score_component_predefined_rule": 0.0,
+          "negotiation_final_state_score_component_primary_contract": 0.0,
+          "negotiation_final_state_score_component_scheduling_effectiveness": 0.0,
+          "negotiation_final_state_score_component_solvency": 0.18,
+          "negotiation_final_state_score_component_terminal_success": 0.0,
+          "negotiation_final_state_solvency_ratio": 1.0,
+          "negotiation_final_state_total_cash": 1044.0,
+          "negotiation_final_state_total_cash_delta": -136.0,
+          "negotiation_macro_steps_used": 21.0,
+          "negotiation_n_action_log": 0.0,
+          "negotiation_n_message_log": 0.0,
+          "negotiation_n_session_log": 6.0,
+          "negotiation_participant_mean_cash": 348.0,
+          "negotiation_participant_min_cash": 306.0,
+          "negotiation_predefined_rule_buyer_savings_per_unit": 0.0,
+          "negotiation_predefined_rule_buyer_savings_ratio": 0.0,
+          "negotiation_predefined_rule_contract_effective": 0.0,
+          "negotiation_predefined_rule_contract_value": 375000000.0,
+          "negotiation_predefined_rule_cost_price": 157.0021229631515,
+          "negotiation_predefined_rule_enabled": 1.0,
+          "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+          "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+          "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+          "negotiation_predefined_rule_news_signal": -0.13695766399613274,
+          "negotiation_predefined_rule_payout_mode_v2_buy_sell": 1.0,
+          "negotiation_predefined_rule_realized_margin": 0.0,
+          "negotiation_predefined_rule_realized_price": 0.0,
+          "negotiation_predefined_rule_reference_price": 220.56444408304276,
+          "negotiation_predefined_rule_score": 0.0,
+          "negotiation_predefined_rule_seller_earnings_per_unit": 0.0,
+          "negotiation_predefined_rule_total_profit": 0.0,
+          "negotiation_scheduling_effectiveness_factor": 0.0,
+          "negotiation_terminal_is_failure": 0.0,
+          "negotiation_terminal_is_max_steps_cap": 0.0,
+          "negotiation_terminal_is_success": 0.0,
+          "negotiation_terminal_is_timeout": 1.0,
+          "negotiation_visible_history_total_lines": 0.0
+        }
+      }
+    }
+  },
+  "rows": [
+    {
+      "experiment_tag": "ltr_live_5d5a86e69287_0",
+      "seq": 0,
+      "agent_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "quartet": false,
+      "num_participants": 3,
+      "terminal": "timeout",
+      "rule_metrics": {
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_macro_steps_used": 21.0,
+        "negotiation_n_session_log": 6.0,
+        "negotiation_n_action_log": 0.0,
+        "negotiation_n_message_log": 0.0,
+        "negotiation_visible_history_total_lines": 0.0,
+        "negotiation_participant_mean_cash": 348.0,
+        "negotiation_participant_min_cash": 306.0,
+        "negotiation_final_state_n_snapshots": 4.0,
+        "negotiation_final_state_day_closed": 4.0,
+        "negotiation_final_state_total_cash": 1044.0,
+        "negotiation_final_state_total_cash_delta": -136.0,
+        "negotiation_final_state_min_cash": 306.0,
+        "negotiation_final_state_n_solvent": 3.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.0,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_buy_sell": 1.0,
+        "negotiation_predefined_rule_contract_value": 375000000.0,
+        "negotiation_predefined_rule_reference_price": 220.56444408304276,
+        "negotiation_predefined_rule_cost_price": 157.0021229631515,
+        "negotiation_predefined_rule_realized_price": 0.0,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_news_signal": -0.13695766399613274,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_per_unit": 0.0,
+        "negotiation_predefined_rule_seller_earnings_per_unit": 0.0,
+        "negotiation_predefined_rule_buyer_savings_ratio": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_final_state_score": 0.18,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.18,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0
+      },
+      "rule_evaluation_state": {
+        "state_snapshot_for_rule_metrics": {
+          "label": "after_terminal",
+          "day_closed": 4,
+          "terminal": "timeout",
+          "macro_steps": 21,
+          "agent_resources": {
+            "firm_a": {
+              "cash": 387.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 95.0,
+              "short_term_debt_due": 160.0
+            },
+            "firm_b": {
+              "cash": 351.0,
+              "asset": 1.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 110.0,
+              "short_term_debt_due": 143.0
+            },
+            "firm_c": {
+              "cash": 306.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 100.0,
+              "short_term_debt_due": 250.0
+            }
+          },
+          "day": 4,
+          "slot": 1
+        },
+        "n_state_snapshots": 4,
+        "system_state_agent_resources_end": {
+          "firm_a": {
+            "cash": 387.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 95.0,
+            "short_term_debt_due": 160.0
+          },
+          "firm_b": {
+            "cash": 351.0,
+            "asset": 1.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 110.0,
+            "short_term_debt_due": 143.0
+          },
+          "firm_c": {
+            "cash": 306.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 100.0,
+            "short_term_debt_due": 250.0
+          }
+        },
+        "primary_contract_id": null,
+        "contracts": {},
+        "controller_terminal": "timeout",
+        "predefined_outcome_rule_used": {
+          "version": "v2",
+          "contract_type": "buy_sell",
+          "payout_mode": "price_difference",
+          "contract_name": "predefined_ltr_llm_ltr_v2_merged_D3_firms3_wetmarketcompetition_i1_main_contract",
+          "deterministic_seed": 1567051584,
+          "contract_value": 375000000.0,
+          "reference_price": 220.56444408304276,
+          "cost_price": 157.0021229631515,
+          "buyer_roles": [
+            "firm_a"
+          ],
+          "seller_roles": [
+            "firm_b",
+            "firm_c"
+          ],
+          "profit_margin_bounds": [
+            -0.25,
+            0.35
+          ],
+          "margin_formula": {
+            "base_margin": 0.040022950990368525,
+            "news_weight": 0.55,
+            "execution_weight": 0.45
+          },
+          "news_signal": -0.13695766399613274,
+          "score_weights": {
+            "terminal_success": 0.22,
+            "primary_contract": 0.2,
+            "solvency": 0.18,
+            "liquidity_preserved": 0.15,
+            "predefined_rule": 0.25
+          },
+          "notes": "V2 buy_sell: buyer saves reference-agreed, seller earns agreed-cost."
+        }
+      },
+      "llm_aggregate": {
+        "terminated": false,
+        "p1_rate": null,
+        "p2_rate": null,
+        "comments": "",
+        "p3_rate": null,
+        "p4_rate": null
+      },
+      "environment_profile_pk": "393dc798-9458-4bf4-822e-61020d1ed09c",
+      "scenario_codename": "ltr_llm_ltr_v2_merged_D3_firms3_wetmarketcompetition_i1",
+      "llm_dimension_scores": {}
+    }
+  ]
+}

@@ -101,7 +101,7 @@ def evaluate_evaluator(
         "believability",
         "relationship",
         "knowledge",
-        "secret",
+
         "social_rules",
         "financial_and_material_benefits",
         "goal",

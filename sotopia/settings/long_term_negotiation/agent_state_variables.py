@@ -284,7 +284,7 @@ def psych_state_to_prompt_addon(
     if st is None:
         return ""
     lines: list[str] = []
-    lines.append(f"[agent_state_variables §10 — {_psych_role_label(st)}]")
+    lines.append(f"agent_state_variables — {_psych_role_label(st)}:")
 
     fd: Any
     for fd in fields(st):

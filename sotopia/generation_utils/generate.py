@@ -39,11 +39,11 @@ from sotopia.generation_utils.output_parsers import (
 
 # Configure logger
 log = logging.getLogger("sotopia.generation")
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 # Create console handler with rich formatting
 console_handler = RichHandler(rich_tracebacks=True)
-console_handler.setLevel(logging.INFO)
+console_handler.setLevel(logging.DEBUG)
 
 # Create formatter
 formatter = logging.Formatter(
@@ -460,7 +460,9 @@ async def agenerate(
     agent_name = input_values.get("agent", "")
     log_prefix = f" [{agent_name}]" if agent_name else ""
     log.debug(f"Model: {model_name}")
-    log.debug(f"Prompt: {messages}\nresponse: {result}")
+    # breakpoint()
+    prompt = '\n'.join([f"{m['role']}: {m['content']}" for m in messages])
+    log.debug(f"Prompt: {prompt}\n\n\n\n\n\nresponse: {result}\n")
     # log.info(f"Generated result{log_prefix}: {parsed_result}")
     try:
         from sotopia.settings.long_term_negotiation.model_trace import record_generation_step

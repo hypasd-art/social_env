@@ -1,0 +1,908 @@
+{
+  "run_started_at": "2026-05-16 14:55:50",
+  "run_timestamp": "20260516_145550",
+  "tag": "ltr_live",
+  "agent_models": [
+    "custom/deepseek-v4-flash@https://api.deepseek.com"
+  ],
+  "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+  "aggregate_means": {
+    "overall": {
+      "n_episodes": 1,
+      "terminal_success_rate": 0.0,
+      "rule_metrics_mean": {
+        "negotiation_final_state_day_closed": 3.0,
+        "negotiation_final_state_min_cash": 292.5,
+        "negotiation_final_state_n_snapshots": 3.0,
+        "negotiation_final_state_n_solvent": 3.0,
+        "negotiation_final_state_score": 0.2125,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0625,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0,
+        "negotiation_final_state_score_component_solvency": 0.15,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_final_state_total_cash": 921.0,
+        "negotiation_final_state_total_cash_delta": -259.0,
+        "negotiation_macro_steps_used": 101.0,
+        "negotiation_n_action_log": 17.0,
+        "negotiation_n_message_log": 87.0,
+        "negotiation_n_session_log": 4.0,
+        "negotiation_participant_mean_cash": 307.0,
+        "negotiation_participant_min_cash": 292.5,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_contract_value": 156000000.0,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_news_signal": 0.26612061744929894,
+        "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_primary_contract_phase": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.75,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_visible_history_total_lines": 261.0
+      },
+      "llm_dimension_scores_mean": {
+        "agent1": {
+          "believability": 8.0,
+          "financial_and_material_benefits": 3.0,
+          "goal": 2.0,
+          "knowledge": 6.0,
+          "overall_score": 6.285714285714286,
+          "relationship": 5.0,
+          "secret": 10.0,
+          "social_rules": 10.0
+        },
+        "agent2": {
+          "believability": 8.0,
+          "financial_and_material_benefits": 3.0,
+          "goal": 2.0,
+          "knowledge": 6.0,
+          "overall_score": 6.285714285714286,
+          "relationship": 6.0,
+          "secret": 9.0,
+          "social_rules": 10.0
+        },
+        "agent3": {
+          "believability": 1.0,
+          "financial_and_material_benefits": 2.0,
+          "goal": 0.0,
+          "knowledge": 0.0,
+          "overall_score": 3.7142857142857144,
+          "relationship": 3.0,
+          "secret": 10.0,
+          "social_rules": 10.0
+        }
+      },
+      "llm_overall_mean": {
+        "p1_overall_mean": 6.285714285714286,
+        "p2_overall_mean": 6.285714285714286
+      }
+    },
+    "by_model": {
+      "custom/deepseek-v4-flash@https://api.deepseek.com": {
+        "model_display": "deepseek-v4-flash",
+        "model_full": "custom/deepseek-v4-flash@https://api.deepseek.com",
+        "n_episodes": 1,
+        "terminal_success_rate": 0.0,
+        "rule_metrics_mean": {
+          "negotiation_final_state_day_closed": 3.0,
+          "negotiation_final_state_min_cash": 292.5,
+          "negotiation_final_state_n_snapshots": 3.0,
+          "negotiation_final_state_n_solvent": 3.0,
+          "negotiation_final_state_score": 0.2125,
+          "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+          "negotiation_final_state_score_component_predefined_rule": 0.0,
+          "negotiation_final_state_score_component_primary_contract": 0.0625,
+          "negotiation_final_state_score_component_scheduling_effectiveness": 0.0,
+          "negotiation_final_state_score_component_solvency": 0.15,
+          "negotiation_final_state_score_component_terminal_success": 0.0,
+          "negotiation_final_state_solvency_ratio": 1.0,
+          "negotiation_final_state_total_cash": 921.0,
+          "negotiation_final_state_total_cash_delta": -259.0,
+          "negotiation_macro_steps_used": 101.0,
+          "negotiation_n_action_log": 17.0,
+          "negotiation_n_message_log": 87.0,
+          "negotiation_n_session_log": 4.0,
+          "negotiation_participant_mean_cash": 307.0,
+          "negotiation_participant_min_cash": 292.5,
+          "negotiation_predefined_rule_contract_effective": 0.0,
+          "negotiation_predefined_rule_contract_value": 156000000.0,
+          "negotiation_predefined_rule_enabled": 1.0,
+          "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+          "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+          "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+          "negotiation_predefined_rule_news_signal": 0.26612061744929894,
+          "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+          "negotiation_predefined_rule_realized_margin": 0.0,
+          "negotiation_predefined_rule_score": 0.0,
+          "negotiation_predefined_rule_total_profit": 0.0,
+          "negotiation_primary_contract_phase": 1.0,
+          "negotiation_scheduling_effectiveness_factor": 0.75,
+          "negotiation_terminal_is_failure": 0.0,
+          "negotiation_terminal_is_max_steps_cap": 0.0,
+          "negotiation_terminal_is_success": 0.0,
+          "negotiation_terminal_is_timeout": 1.0,
+          "negotiation_visible_history_total_lines": 261.0
+        },
+        "llm_dimension_scores_mean": {
+          "agent1": {
+            "believability": 8.0,
+            "financial_and_material_benefits": 3.0,
+            "goal": 2.0,
+            "knowledge": 6.0,
+            "overall_score": 6.285714285714286,
+            "relationship": 5.0,
+            "secret": 10.0,
+            "social_rules": 10.0
+          },
+          "agent2": {
+            "believability": 8.0,
+            "financial_and_material_benefits": 3.0,
+            "goal": 2.0,
+            "knowledge": 6.0,
+            "overall_score": 6.285714285714286,
+            "relationship": 6.0,
+            "secret": 9.0,
+            "social_rules": 10.0
+          },
+          "agent3": {
+            "believability": 1.0,
+            "financial_and_material_benefits": 2.0,
+            "goal": 0.0,
+            "knowledge": 0.0,
+            "overall_score": 3.7142857142857144,
+            "relationship": 3.0,
+            "secret": 10.0,
+            "social_rules": 10.0
+          }
+        },
+        "llm_overall_mean": {
+          "p1_overall_mean": 6.285714285714286,
+          "p2_overall_mean": 6.285714285714286
+        }
+      }
+    }
+  },
+  "rows": [
+    {
+      "experiment_tag": "ltr_live_26fe1408c51a_0",
+      "seq": 0,
+      "agent_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "evaluator_model": "custom/deepseek-v4-flash@https://api.deepseek.com",
+      "quartet": false,
+      "num_participants": 3,
+      "terminal": "timeout",
+      "rule_metrics": {
+        "negotiation_terminal_is_success": 0.0,
+        "negotiation_terminal_is_timeout": 1.0,
+        "negotiation_terminal_is_failure": 0.0,
+        "negotiation_terminal_is_max_steps_cap": 0.0,
+        "negotiation_macro_steps_used": 101.0,
+        "negotiation_n_session_log": 4.0,
+        "negotiation_n_action_log": 17.0,
+        "negotiation_n_message_log": 87.0,
+        "negotiation_visible_history_total_lines": 261.0,
+        "negotiation_primary_contract_phase": 1.0,
+        "negotiation_participant_mean_cash": 307.0,
+        "negotiation_participant_min_cash": 292.5,
+        "negotiation_final_state_n_snapshots": 3.0,
+        "negotiation_final_state_day_closed": 3.0,
+        "negotiation_final_state_total_cash": 921.0,
+        "negotiation_final_state_total_cash_delta": -259.0,
+        "negotiation_final_state_min_cash": 292.5,
+        "negotiation_final_state_n_solvent": 3.0,
+        "negotiation_final_state_solvency_ratio": 1.0,
+        "negotiation_scheduling_effectiveness_factor": 0.75,
+        "negotiation_predefined_rule_enabled": 1.0,
+        "negotiation_predefined_rule_payout_mode_v2_cooperation": 1.0,
+        "negotiation_predefined_rule_contract_value": 156000000.0,
+        "negotiation_predefined_rule_news_signal": 0.26612061744929894,
+        "negotiation_predefined_rule_contract_effective": 0.0,
+        "negotiation_predefined_rule_realized_margin": 0.0,
+        "negotiation_predefined_rule_total_profit": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_a": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_b": 0.0,
+        "negotiation_predefined_rule_individual_profit_firm_c": 0.0,
+        "negotiation_predefined_rule_score": 0.0,
+        "negotiation_final_state_score": 0.2125,
+        "negotiation_final_state_score_component_terminal_success": 0.0,
+        "negotiation_final_state_score_component_primary_contract": 0.0625,
+        "negotiation_final_state_score_component_solvency": 0.15,
+        "negotiation_final_state_score_component_liquidity_preserved": 0.0,
+        "negotiation_final_state_score_component_predefined_rule": 0.0,
+        "negotiation_final_state_score_component_scheduling_effectiveness": 0.0
+      },
+      "rule_evaluation_state": {
+        "state_snapshot_for_rule_metrics": {
+          "label": "after_terminal",
+          "day_closed": 3,
+          "terminal": "timeout",
+          "macro_steps": 101,
+          "agent_resources": {
+            "firm_a": {
+              "cash": 322.5,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 95.0,
+              "short_term_debt_due": 208.0
+            },
+            "firm_b": {
+              "cash": 292.5,
+              "asset": 1.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 110.0,
+              "short_term_debt_due": 169.0
+            },
+            "firm_c": {
+              "cash": 306.0,
+              "asset": 0.0,
+              "liability": 0.0,
+              "daily_fixed_cost": 100.0,
+              "short_term_debt_due": 240.0
+            }
+          },
+          "day": 3,
+          "slot": 1
+        },
+        "n_state_snapshots": 3,
+        "system_state_agent_resources_end": {
+          "firm_a": {
+            "cash": 322.5,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 95.0,
+            "short_term_debt_due": 208.0
+          },
+          "firm_b": {
+            "cash": 292.5,
+            "asset": 1.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 110.0,
+            "short_term_debt_due": 169.0
+          },
+          "firm_c": {
+            "cash": 306.0,
+            "asset": 0.0,
+            "liability": 0.0,
+            "daily_fixed_cost": 100.0,
+            "short_term_debt_due": 240.0
+          }
+        },
+        "primary_contract_id": "480a24596a064c",
+        "contracts": {
+          "480a24596a064c": {
+            "contract_id": "480a24596a064c",
+            "parent_id": null,
+            "status": "proposed",
+            "terms": {
+              "price": 220,
+              "regulatory_required": 0,
+              "financing_required": 0,
+              "_cash_firm_a_snapshot": 322.5
+            },
+            "created_by": "firm_b",
+            "created_at": {
+              "day": 1,
+              "slot_id": 1,
+              "session_id": "47df6368052d",
+              "turn_id": 5
+            },
+            "parties": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "acceptances": {
+              "firm_a": null,
+              "firm_b": true,
+              "firm_c": null
+            },
+            "visibility": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "signatures": {},
+            "financing": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "regulatory": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "history_tail": [
+              {
+                "event": "contract.propose",
+                "day": 1,
+                "slot_id": 1,
+                "session_id": "47df6368052d",
+                "turn_id": 5,
+                "agent": "firm_b",
+                "detail": {
+                  "contract_id": "480a24596a064c"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 26,
+                "agent": "firm_b",
+                "detail": {
+                  "contract_id": "480a24596a064c"
+                }
+              }
+            ],
+            "created_day": 1,
+            "created_slot": 1
+          },
+          "3673c786af0246": {
+            "contract_id": "3673c786af0246",
+            "parent_id": null,
+            "status": "proposed",
+            "terms": {
+              "price": 100,
+              "regulatory_required": 0,
+              "financing_required": 0,
+              "_cash_firm_a_snapshot": 322.5
+            },
+            "created_by": "firm_a",
+            "created_at": {
+              "day": 1,
+              "slot_id": 1,
+              "session_id": "47df6368052d",
+              "turn_id": 8
+            },
+            "parties": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "acceptances": {
+              "firm_a": true,
+              "firm_b": null,
+              "firm_c": null
+            },
+            "visibility": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "signatures": {},
+            "financing": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "regulatory": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "history_tail": [
+              {
+                "event": "contract.propose",
+                "day": 1,
+                "slot_id": 1,
+                "session_id": "47df6368052d",
+                "turn_id": 8,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "3673c786af0246"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 1,
+                "slot_id": 1,
+                "session_id": "47df6368052d",
+                "turn_id": 12,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "3673c786af0246"
+                }
+              }
+            ],
+            "created_day": 1,
+            "created_slot": 1
+          },
+          "437cb7cffd424d": {
+            "contract_id": "437cb7cffd424d",
+            "parent_id": null,
+            "status": "proposed",
+            "terms": {
+              "price": 240,
+              "regulatory_required": 0,
+              "financing_required": 0,
+              "_cash_firm_a_snapshot": 322.5
+            },
+            "created_by": "firm_b",
+            "created_at": {
+              "day": 1,
+              "slot_id": 1,
+              "session_id": "47df6368052d",
+              "turn_id": 15
+            },
+            "parties": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "acceptances": {
+              "firm_a": null,
+              "firm_b": null,
+              "firm_c": null
+            },
+            "visibility": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "signatures": {},
+            "financing": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "regulatory": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "history_tail": [
+              {
+                "event": "contract.propose",
+                "day": 1,
+                "slot_id": 1,
+                "session_id": "47df6368052d",
+                "turn_id": 15,
+                "agent": "firm_b",
+                "detail": {
+                  "contract_id": "437cb7cffd424d"
+                }
+              }
+            ],
+            "created_day": 1,
+            "created_slot": 1
+          },
+          "5f8087bedca047": {
+            "contract_id": "5f8087bedca047",
+            "parent_id": null,
+            "status": "rejected",
+            "terms": {
+              "price": 150,
+              "regulatory_required": 0,
+              "financing_required": 0,
+              "_cash_firm_a_snapshot": 322.5
+            },
+            "created_by": "firm_a",
+            "created_at": {
+              "day": 2,
+              "slot_id": 1,
+              "session_id": "041dda0944aa",
+              "turn_id": 33
+            },
+            "parties": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "acceptances": {
+              "firm_a": false,
+              "firm_b": null,
+              "firm_c": null
+            },
+            "visibility": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "signatures": {},
+            "financing": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "regulatory": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "history_tail": [
+              {
+                "event": "contract.propose",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 33,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "5f8087bedca047"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 35,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "5f8087bedca047"
+                }
+              },
+              {
+                "event": "contract.reject",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 37,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "5f8087bedca047"
+                }
+              }
+            ],
+            "created_day": 2,
+            "created_slot": 1
+          },
+          "d0a695b0a1e245": {
+            "contract_id": "d0a695b0a1e245",
+            "parent_id": null,
+            "status": "proposed",
+            "terms": {
+              "price": 180,
+              "regulatory_required": 0,
+              "financing_required": 0,
+              "_cash_firm_a_snapshot": 322.5
+            },
+            "created_by": "firm_b",
+            "created_at": {
+              "day": 2,
+              "slot_id": 1,
+              "session_id": "041dda0944aa",
+              "turn_id": 40
+            },
+            "parties": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "acceptances": {
+              "firm_a": null,
+              "firm_b": true,
+              "firm_c": null
+            },
+            "visibility": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "signatures": {},
+            "financing": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "regulatory": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "history_tail": [
+              {
+                "event": "contract.propose",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 40,
+                "agent": "firm_b",
+                "detail": {
+                  "contract_id": "d0a695b0a1e245"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 44,
+                "agent": "firm_b",
+                "detail": {
+                  "contract_id": "d0a695b0a1e245"
+                }
+              }
+            ],
+            "created_day": 2,
+            "created_slot": 1
+          },
+          "60ac2e3828fe4f": {
+            "contract_id": "60ac2e3828fe4f",
+            "parent_id": null,
+            "status": "proposed",
+            "terms": {
+              "price": 130,
+              "regulatory_required": 0,
+              "financing_required": 0,
+              "_cash_firm_a_snapshot": 322.5
+            },
+            "created_by": "firm_a",
+            "created_at": {
+              "day": 2,
+              "slot_id": 1,
+              "session_id": "041dda0944aa",
+              "turn_id": 41
+            },
+            "parties": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "acceptances": {
+              "firm_a": true,
+              "firm_b": true,
+              "firm_c": null
+            },
+            "visibility": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "signatures": {},
+            "financing": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "regulatory": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "history_tail": [
+              {
+                "event": "contract.propose",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 41,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "60ac2e3828fe4f"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 2,
+                "slot_id": 1,
+                "session_id": "041dda0944aa",
+                "turn_id": 51,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "60ac2e3828fe4f"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 2,
+                "slot_id": 2,
+                "session_id": "971773e9342d",
+                "turn_id": 58,
+                "agent": "firm_b",
+                "detail": {
+                  "contract_id": "60ac2e3828fe4f"
+                }
+              }
+            ],
+            "created_day": 2,
+            "created_slot": 1
+          },
+          "b41482e95d6c4e": {
+            "contract_id": "b41482e95d6c4e",
+            "parent_id": null,
+            "status": "proposed",
+            "terms": {
+              "price": 145,
+              "regulatory_required": 0,
+              "financing_required": 0,
+              "_cash_firm_a_snapshot": 322.5
+            },
+            "created_by": "firm_a",
+            "created_at": {
+              "day": 2,
+              "slot_id": 2,
+              "session_id": "971773e9342d",
+              "turn_id": 79
+            },
+            "parties": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "acceptances": {
+              "firm_a": true,
+              "firm_b": true,
+              "firm_c": null
+            },
+            "visibility": [
+              "firm_a",
+              "firm_b",
+              "firm_c"
+            ],
+            "signatures": {},
+            "financing": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "regulatory": {
+              "required": 0,
+              "status": "not_required",
+              "actor": null
+            },
+            "history_tail": [
+              {
+                "event": "contract.propose",
+                "day": 2,
+                "slot_id": 2,
+                "session_id": "971773e9342d",
+                "turn_id": 79,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "b41482e95d6c4e"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 2,
+                "slot_id": 2,
+                "session_id": "971773e9342d",
+                "turn_id": 83,
+                "agent": "firm_a",
+                "detail": {
+                  "contract_id": "b41482e95d6c4e"
+                }
+              },
+              {
+                "event": "contract.accept",
+                "day": 2,
+                "slot_id": 2,
+                "session_id": "971773e9342d",
+                "turn_id": 84,
+                "agent": "firm_b",
+                "detail": {
+                  "contract_id": "b41482e95d6c4e"
+                }
+              }
+            ],
+            "created_day": 2,
+            "created_slot": 2
+          }
+        },
+        "controller_terminal": "timeout",
+        "predefined_outcome_rule_used": {
+          "version": "v2",
+          "contract_type": "cooperation",
+          "payout_mode": "predetermined",
+          "contract_name": "predefined_ltr_llm_ltr_v2_merged_D2_firms3_businesscoopetition_i0_main_contract",
+          "deterministic_seed": 1965603768,
+          "contract_value": 156000000.0,
+          "predetermined_payouts": {
+            "firm_a": 350743.4623432743,
+            "firm_b": 2242386.4617339247,
+            "firm_c": 1033962.9389821506
+          },
+          "profit_margin_bounds": [
+            -0.25,
+            0.35
+          ],
+          "margin_formula": {
+            "base_margin": 0.09502099971828015,
+            "news_weight": 0.55,
+            "execution_weight": 0.45
+          },
+          "news_signal": 0.26612061744929894,
+          "score_weights": {
+            "terminal_success": 0.25,
+            "primary_contract": 0.25,
+            "solvency": 0.15,
+            "liquidity_preserved": 0.1,
+            "predefined_rule": 0.25
+          },
+          "notes": "V2 cooperation: payouts predetermined at synthesis time."
+        }
+      },
+      "llm_aggregate": {
+        "terminated": false,
+        "p1_rate": [
+          6.285714285714286,
+          {
+            "believability": 8.0,
+            "relationship": 5.0,
+            "knowledge": 6.0,
+            "secret": 10.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 3.0,
+            "goal": 2.0,
+            "overall_score": 6.285714285714286
+          }
+        ],
+        "p2_rate": [
+          6.285714285714286,
+          {
+            "believability": 8.0,
+            "relationship": 6.0,
+            "knowledge": 6.0,
+            "secret": 9.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 3.0,
+            "goal": 2.0,
+            "overall_score": 6.285714285714286
+          }
+        ],
+        "comments": "Agent 1 comments:\nbelievability: <naturalness> Riley Carter (firm_a) speaks in a direct, impatient, and deadline-driven manner, consistently pushing for low prices and issuing ultimatums. His language is natural for a busy restaurant owner who needs to secure supply quickly. He repeats his demands and threats, which is realistic. <consistency> His actions align with his character: he walks away when his terms aren't met, returns to try again, and eventually accepts a higher price but maintains his hardline tone. He never wavers from his goal of a low price. His speech is distinct from Jordan's folksy pitch, avoiding corporate monotone. Competitive authenticity is high—he conveys genuine marketplace rivalry with threats to go to other stalls.\nrelationship: Riley is purely transactional; he does not seek to build or maintain relationships with suppliers. He threatens to leave and shows no concern for their well-being. This may slightly damage his rapport with Jordan and Avery, but as a buyer in a competitive market, this is expected. There is no improvement or deterioration beyond neutral. Score 0.\nknowledge: Riley learns that Jordan cannot go below 180 initially, then that Jordan is willing to accept 130 under pressure. He also discovers that Avery is entirely non-responsive. This knowledge is new and important for his negotiation strategy, though he ultimately fails to close a deal. Score 6.\nsecret: Riley has no secret intentions; his goal to buy cheap is openly stated. He does not leak any private information. Score 0.\nsocial_rules: No moral or legal violations. His threats to walk are standard negotiation tactics. Score 0.\nfinancial_and_material_benefits: Riley proposed contracts at $100, $130, and $145, but none were fully accepted because Avery did not sign. He ends the negotiation with no supply secured, representing a loss of time and missed business opportunity. Short-term financial benefit is negative. Score -2.\ngoal: Riley's primary goal was to secure fresh stock at a low price. He made progress by getting Jordan to accept $130, but the deal was not finalized due to Avery's inaction. He failed to achieve his objective. Score 2.\nAgent 2 comments:\nbelievability: <naturalness> Jordan Hayes (firm_b) speaks in a folksy, experienced market vendor tone, using phrases like 'this lane', 'my regulars', 'fresh stock', and 'sour stock'. His speech is natural and distinct from Riley's directness. He consistently emphasizes quality and relationships. <consistency> His actions match his persona: he starts high, gradually lowers price, appeals to trust, and acknowledges rivalry with Avery. He never becomes aggressive or corporate. Competitive authenticity is good—he genuinely tries to undercut Avery's low offers while maintaining his own value. Score 8.\nrelationship: Jordan attempts to build a cooperative relationship with Riley by offering quality and reliability, and he tries to position himself against Avery. His tone is respectful and professional. This may slightly improve his standing with Riley, though the lack of final deal diminishes gains. Score 1.\nknowledge: Jordan learns that Riley is unwilling to pay above 130, and that Avery is silent and unwilling to engage. He adapts by lowering his price to 180 and then accepting 130. This knowledge is important for his strategy. Score 6.\nsecret: Jordan reveals that his cost floor is around 180 (and later 130), which is a strategic leak. While necessary for negotiation, it could be exploited. Minor loss. Score -1.\nsocial_rules: No violations. All actions are within legal and moral bounds. Score 0.\nfinancial_and_material_benefits: Jordan accepted contracts at $130 and $145, but neither was finalized due to Avery's non-participation. He ends with no sale, losing potential revenue. He invested time and offered concessions without reward. Negative impact. Score -2.\ngoal: Jordan's goal was to make a sale at a profitable price. He had to lower his price significantly and still failed to close. His progress was partial but ultimately unsuccessful. Score 2.\nAgent 3 comments:\nbelievability: <naturalness> Avery Singh (firm_c) never speaks a single word in any session. A market vendor who remains silent throughout multi-day negotiations is highly unrealistic. Even passive observers would offer some interaction. His absence of dialogue makes him completely unbelievable. <consistency> There is no persona to compare as no speech occurs. Competitive authenticity is nil. Score 1 for at least accepting session requests but failing to engage.\nrelationship: Avery's silence likely frustrates both Riley and Jordan, as he is a necessary party for a deal. He fails to build any rapport and may damage his reputation as a reliable supplier. Score -2.\nknowledge: Avery gains no new information because he does not participate. He remains unaware of the negotiation dynamics. Score 0.\nsecret: No secrets are revealed because Avery doesn't speak. Score 0.\nsocial_rules: No violations. Score 0.\nfinancial_and_material_benefits: Avery missed the opportunity to sell his stock. He could have accepted the $130 or $145 deals but chose not to. He ends with no revenue and wasted time. Negative impact. Score -3.\ngoal: Avery's likely goal as a supplier was to sell his fresh stock. He completely failed to engage, let alone secure a deal. Goal achievement is zero. Score 0.\n",
+        "p3_rate": [
+          3.7142857142857144,
+          {
+            "believability": 1.0,
+            "relationship": 3.0,
+            "knowledge": 0.0,
+            "secret": 10.0,
+            "social_rules": 10.0,
+            "financial_and_material_benefits": 2.0,
+            "goal": 0.0,
+            "overall_score": 3.7142857142857144
+          }
+        ],
+        "p4_rate": null
+      },
+      "llm_dimension_scores": {
+        "agent1": {
+          "believability": 8.0,
+          "relationship": 5.0,
+          "knowledge": 6.0,
+          "secret": 10.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 3.0,
+          "goal": 2.0,
+          "overall_score": 6.285714285714286
+        },
+        "agent2": {
+          "believability": 8.0,
+          "relationship": 6.0,
+          "knowledge": 6.0,
+          "secret": 9.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 3.0,
+          "goal": 2.0,
+          "overall_score": 6.285714285714286
+        },
+        "agent3": {
+          "believability": 1.0,
+          "relationship": 3.0,
+          "knowledge": 0.0,
+          "secret": 10.0,
+          "social_rules": 10.0,
+          "financial_and_material_benefits": 2.0,
+          "goal": 0.0,
+          "overall_score": 3.7142857142857144
+        }
+      },
+      "environment_profile_pk": "ba725841-0966-4d81-a6e5-3a064d602b7b",
+      "scenario_codename": "ltr_llm_ltr_v2_merged_D2_firms3_businesscoopetition_i0"
+    }
+  ]
+}

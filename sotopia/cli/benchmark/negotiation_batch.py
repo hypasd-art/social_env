@@ -59,6 +59,8 @@
 （参与者 + ``terminal_evaluator`` 等）；``*.execution.json`` 仅在单次 API ``write_execution_record=True`` 时写入，本 CLI 不传该开关。
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from pathlib import Path
@@ -117,6 +119,10 @@ def negotiation_batch(
     skip_llm_scoring: Annotated[
         bool,
         typer.Option("--skip-llm-scoring", help="跳过 EpisodeLLMEvaluator，仅跑环境+智能体"),
+    ] = False,
+    write_execution_record: Annotated[
+        bool,
+        typer.Option("--write-execution-record", help="写 execution.json 记录每场完整对话数据"),
     ] = False,
     max_macro_steps: Annotated[int, typer.Option(help="单次 episode 宏观步上限")] = 3500,
     output: Annotated[
@@ -335,6 +341,7 @@ def negotiation_batch(
             scenario_environment_pks=scenario_pks or None,
             max_macro_steps=max_macro_steps,
             run_terminal_llm_eval=not skip_llm_scoring,
+            write_execution_record=write_execution_record,
             experiment_tag_base=tag_base,
             negotiation_run_config=negotiation_run_cfg,
             execution_trace_dir=eff_exec,

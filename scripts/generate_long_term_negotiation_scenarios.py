@@ -394,15 +394,17 @@ def _social_graph_edges(roles: tuple[str, ...]) -> list[dict[str, Any]]:
         rel, trust_bias, note = firm_competition_templates[variant % len(firm_competition_templates)]
         pa = _persona_for_role(a)
         pb = _persona_for_role(b)
+        la = _HANDWRITTEN_ROLE_OCCUPATION.get(a, a)
+        lb = _HANDWRITTEN_ROLE_OCCUPATION.get(b, b)
         a_skill = str((pb.get("core_skills") or ["negotiation"])[0])
         b_skill = str((pa.get("core_skills") or ["negotiation"])[0])
         a_view_b = (
-            f"{a} treats {b} as a direct commercial competitor for the same customer pool; "
-            f"{b} reads as {str(pb.get('personality', 'balanced'))} on {a_skill}."
+            f"{la} treats {lb} as a direct commercial competitor for the same customer pool; "
+            f"{lb} reads as {str(pb.get('personality', 'balanced'))} on {a_skill}."
         )
         b_view_a = (
-            f"{b} treats {a} as a direct commercial competitor for the same customer pool; "
-            f"{a} reads as {str(pa.get('personality', 'balanced'))} on {b_skill}."
+            f"{lb} treats {la} as a direct commercial competitor for the same customer pool; "
+            f"{la} reads as {str(pa.get('personality', 'balanced'))} on {b_skill}."
         )
         a_view_b += " Expects reservation prices to move quickly under side-by-side comparison."
         b_view_a += " Expects reservation prices to move quickly under side-by-side comparison."
@@ -428,6 +430,8 @@ def _social_graph_edges(roles: tuple[str, ...]) -> list[dict[str, Any]]:
             if not a_f and not b_f:
                 pa = _persona_for_role(a)
                 pb = _persona_for_role(b)
+                la = _HANDWRITTEN_ROLE_OCCUPATION.get(a, a)
+                lb = _HANDWRITTEN_ROLE_OCCUPATION.get(b, b)
                 rel = "institutional_co_gatekeeping"
                 trust_bias = 0.18
                 note = (
@@ -435,11 +439,11 @@ def _social_graph_edges(roles: tuple[str, ...]) -> list[dict[str, Any]]:
                     "this edge is coordination, not symmetric profit rivalry."
                 )
                 s_it = (
-                    f"{a} treats {b} as shaping enforcement cadence that capital conditions reference; "
+                    f"{la} treats {lb} as shaping enforcement cadence that capital conditions reference; "
                     f"signal reads {str(pb.get('personality', 'balanced'))}."
                 )
                 t_is = (
-                    f"{b} treats {a} as shaping risk appetite that bleeds into what principals dare promise; "
+                    f"{lb} treats {la} as shaping risk appetite that bleeds into what principals dare promise; "
                     f"signal reads {str(pa.get('personality', 'balanced'))}."
                 )
                 edges.append(
@@ -463,6 +467,7 @@ def _social_graph_edges(roles: tuple[str, ...]) -> list[dict[str, Any]]:
             else:
                 firm_r, inst_r = b, a
                 f_prof, i_prof = _persona_for_role(firm_r), _persona_for_role(inst_r)
+            firm_label = _HANDWRITTEN_ROLE_OCCUPATION.get(firm_r, firm_r)
             if inst_r == "investor":
                 rel = "financing_leverage_review"
                 trust_bias = -0.16
@@ -471,11 +476,11 @@ def _social_graph_edges(roles: tuple[str, ...]) -> list[dict[str, Any]]:
                     "the firm negotiates under contingent capital risk."
                 )
                 view_firm_of_inst = (
-                    f"{firm_r} sees {inst_r} as tightening liquidity when parallel rivals destabilize pricing; "
+                    f"{firm_label} sees the investor as tightening liquidity when parallel rivals destabilize pricing; "
                     f"expects {str(i_prof.get('personality', 'balanced'))}-driven covenant scrutiny."
                 )
                 view_inst_of_firm = (
-                    f"{inst_r} reads {firm_r} as exposed to repricing in a rival-heavy lane; "
+                    f"the investor reads {firm_label} as exposed to repricing in a rival-heavy lane; "
                     f"tracks {str((f_prof.get('core_skills') or ['execution'])[0])} execution risk."
                 )
             elif inst_r == "regulator":
@@ -486,19 +491,19 @@ def _social_graph_edges(roles: tuple[str, ...]) -> list[dict[str, Any]]:
                     "on disclosures or stall hygiene."
                 )
                 view_firm_of_inst = (
-                    f"{firm_r} treats {inst_r} as binding visibility and calendar risk on competitive tactics; "
+                    f"{firm_label} treats the regulator as binding visibility and calendar risk on competitive tactics; "
                     f"expects {str(i_prof.get('personality', 'balanced'))} enforcement tone."
                 )
                 view_inst_of_firm = (
-                    f"{inst_r} maps {firm_r} as a principal whose rivalry-driven promotions may trigger audits "
+                    f"the regulator maps {firm_label} as a principal whose rivalry-driven promotions may trigger audits "
                     f"or complaints from parallel vendors."
                 )
             else:
                 rel = "principal_auxiliary_interface"
                 trust_bias = -0.1
                 note = "Auxiliary roster tie: keep diligence without collapsing into firm-firm rivalry semantics."
-                view_firm_of_inst = f"{firm_r} keeps a cautious dossier on {inst_r}."
-                view_inst_of_firm = f"{inst_r} keeps a cautious dossier on {firm_r}."
+                view_firm_of_inst = f"{firm_label} keeps a cautious dossier on the {inst_r}."
+                view_inst_of_firm = f"the {inst_r} keeps a cautious dossier on {firm_label}."
             if a == firm_r:
                 s_it, t_is = view_firm_of_inst, view_inst_of_firm
             else:

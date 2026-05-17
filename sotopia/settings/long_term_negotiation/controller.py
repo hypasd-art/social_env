@@ -489,10 +489,6 @@ class NegotiationWorldController:
         }
         self.session_log.append(entry)
 
-        for sid, agent, content, viewers in self._transcript:
-            line = f"[d={self.day} k={self.slot} sid={sid}] {self.display_name_for(agent)}: {content}"
-            for v in viewers:
-                self.visible_history.setdefault(v, []).append(line)
         self._transcript.clear()
         self._slot_session_close_records.clear()
 
@@ -501,7 +497,7 @@ class NegotiationWorldController:
     def base_observation_tail(self, viewer: str, *, system_digest: str = "") -> str:
         rem = remaining_days(self.day, self.params.D)
         parts = [
-            f"[NegotiationWorld] day={self.day}/{self.params.D} remaining_days={rem} "
+            f"The information of the environment: \nday={self.day}/{self.params.D} remaining_days={rem} "
             f"slot={self.slot}/{self.params.s_max_per_day}",
             f"phase={self.phase.value}",
         ]
@@ -516,11 +512,11 @@ class NegotiationWorldController:
         blocks: list[str] = []
         ext_blk = self.drain_external_event_observations(viewer)
         if ext_blk.strip():
-            blocks.append("[external_events]\n" + ext_blk)
+            blocks.append("external_events:\n" + ext_blk)
         hist = self.visible_history.get(viewer, [])
         if hist:
             tail = hist[-history_tail_lines:]
-            blocks.append("[visible_session_history_recent]\n" + "\n".join(tail))
+            blocks.append("visible_session_history_recent:\n" + "\n".join(tail))
 
         contract_lines: list[str] = []
         for cid, c in sorted(self.contracts.items()):
@@ -534,18 +530,18 @@ class NegotiationWorldController:
                 f"financing={c.financing!r} regulatory={c.regulatory!r}"
             )
         if contract_lines:
-            blocks.append("[contracts_visible_to_you]\n" + "\n".join(contract_lines))
+            blocks.append("contracts_visible_to_you:\n" + "\n".join(contract_lines))
 
-        summary = self._viewer_slot_bookkeeping_summary.get(viewer, "")
-        if summary.strip():
-            blocks.append("[last_slot_bookkeeping]\n" + summary)
+        # summary = self._viewer_slot_bookkeeping_summary.get(viewer, "")
+        # if summary.strip():
+        #     blocks.append("[last_slot_bookkeeping]\n" + summary)
         path_bits: list[str] = []
-        if viewer == "investor" and self.investor_financing_path_withdrawn:
-            path_bits.append("investor_financing_path_withdrawn=true")
-        if viewer == "regulator" and self.regulator_regulatory_path_withdrawn:
-            path_bits.append("regulator_regulatory_path_withdrawn=true")
+        # if viewer == "investor" and self.investor_financing_path_withdrawn:
+        #     path_bits.append("investor_financing_path_withdrawn=true")
+        # if viewer == "regulator" and self.regulator_regulatory_path_withdrawn:
+        #     path_bits.append("regulator_regulatory_path_withdrawn=true")
         if path_bits:
-            blocks.append("[negotiation_path_flags]\n" + "; ".join(path_bits))
+            blocks.append("negotiation_path_flags:\n" + "; ".join(path_bits))
 
         return "\n\n".join(blocks)
 
@@ -562,29 +558,34 @@ class NegotiationWorldController:
         )
         text = (
             f"{pre}"
-            "Scheduling — Invitation round.\n"
-            "Submit ONE session request using action_type='action' and JSON in argument, for example:\n"
-            f"{ex_req}\n"
-            'Or pass: {"negotiation_op":"sched_pass"} to skip inviting this slot.\n'
-            "Rules: Q_i=1 — at most ONE session_request per slot; if your request fails, "
-            "do not invite a different roster in the same slot (wait for a later slot).\n"
-            "scheduling JSON does not consume daily formal-action budget (F_max).\n"
-            "`purpose` describes the meeting topic only, not binding price/deal terms.\n"
-            f"Your name in this episode: {self.display_name_for(viewer)}. "
-            f"Everyone in this episode: {self.format_participant_list_nl(self.agent_names)}.\n"
-            "Use these personal names as strings inside JSON (including yourself if you schedule a session).\n"
+            "Invitation round.\n"
+            "You can use 'session_request' to submit a session request, or pass: {'negotiation_op':'sched_pass'} to skip inviting this slot."
         )
+        # text = (
+        #     f"{pre}"
+        #     "Invitation round.\n"
+        #     "Submit ONE session request using action_type='action' and JSON in argument, for example:\n"
+        #     f"{ex_req}\n"
+        #     'Or pass: {"negotiation_op":"sched_pass"} to skip inviting this slot.\n'
+        #     "Rules: Q_i=1 — at most ONE session_request per slot; if your request fails, "
+        #     "do not invite a different roster in the same slot (wait for a later slot).\n"
+        #     "scheduling JSON does not consume daily formal-action budget (F_max).\n"
+        #     "`purpose` describes the meeting topic only, not binding price/deal terms.\n"
+        #     f"Your name in this episode: {self.display_name_for(viewer)}. "
+        #     f"Everyone in this episode: {self.format_participant_list_nl(self.agent_names)}.\n"
+        #     "Use these personal names as strings inside JSON (including yourself if you schedule a session).\n"
+        # )
         return Observation(
             last_turn=text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest),
             turn_number=self._global_turn_number(),
-            available_actions=["speak", "action", "none"],
+            available_actions=["action", "none"], # "speak", 
         )
 
     def observation_for_scheduling_response(self, viewer: str, system_digest: str) -> Observation:
         pend = self.pending_invites_for(viewer)
         header_lines = [
             "Scheduling — Response round.",
-            "Invitations visible to you (other agents do not see requests they are not part of):",
+            "Invitations visible to you:",
         ]
         if pend:
             for p in pend:
@@ -595,6 +596,7 @@ class NegotiationWorldController:
                 )
         else:
             header_lines.append("  (none)")
+        header_lines.append("You can use 'session_response' and 'session_response_batch' to respond to the invitations, or pass: {'negotiation_op':'sched_pass'} to skip responding this slot.")
         a0 = self.agent_names[0]
         a1 = self.agent_names[1] if len(self.agent_names) > 1 else self.agent_names[0]
         ex_single = json.dumps(
@@ -615,21 +617,11 @@ class NegotiationWorldController:
             },
             ensure_ascii=False,
         )
-        header_lines.extend(
-            [
-                "Respond via action_type='action'. Single invite example:",
-                ex_single,
-                "Multiple invites in ONE tool call, example:",
-                ex_batch,
-                "Rules: unknown/missing/unparseable → treated as decline; you may accept at most ONE invitation "
-                "that targets you — otherwise all your accepts become ineffective this slot.",
-                'If nothing to submit: {"negotiation_op":"sched_pass"}.',
-            ]
-        )
+        # )
         return Observation(
-            last_turn="\n".join(header_lines) + "\n" + self.base_observation_tail(viewer, system_digest=system_digest),
+            last_turn="\n".join(header_lines), #  + "\n" + self.base_observation_tail(viewer, system_digest=system_digest)
             turn_number=self._global_turn_number(),
-            available_actions=["speak", "action", "none"],
+            available_actions=["action", "none"], # "speak", 
         )
 
     def observation_for_session(self, viewer: str, system_digest: str) -> Observation:
@@ -641,81 +633,32 @@ class NegotiationWorldController:
                 available_actions=["none"],
             )
         others = [p for p in sess.participants if p != viewer]
-        sid = sess.session_id
-        N_s = self._session_total_turns.get(sid, 0)
-        T_s = self._effective_T_s(sess)
-        K_lim = self.params.max_turns_per_participant_per_session
-        ky = self._session_agent_turns.get(sid, {}).get(viewer, 0)
-        k_hint = (
-            f"; your_macro_turns_K_i={ky}/{K_lim}"
-            if K_lim is not None
-            else f"; your_macro_turns_K_i={ky} (no per-agent cap)"
-        )
-        budgets = (
-            f"N_s_macro={N_s}/{T_s}{k_hint} "
-            "(order: speaker_role_order ∩ session.participants; skip agents at K_i=K_s; "
-            "one macro turn consumes for pass/invalid/none/formal/control alike).\n"
-        )
-        avail_f = self._available_formal_actions(viewer)
-        avail_f_s = "∞" if avail_f is None else str(avail_f)
-        sc_lim = self.params.max_session_control_actions_per_agent_per_session
-        sc_used = self._session_control_used(viewer)
-        sc_s = (
-            f"{sc_used}/{sc_lim}"
-            if sc_lim is not None
-            else f"{sc_used} (no)"
-        )
-        budgets += (
-            f"formal_actions_available≈min(F,H)={avail_f_s}; "
-            f"session_control_used={sc_s}; "
-            f"M_max(messages)=see max_natural_turns_per_agent_per_session in bookkeeping.\n"
-        )
-        rk = classify_session_roster(sess.participants)
-        s7 = section7_session_hints(rk, viewer=self.display_name_for(viewer))
         text = (
             f"Active session {sess.session_id} with {self.format_participant_list_nl(sess.participants)}.\n"
             f"Others in this session: {self.format_participant_list_nl(others)}.\n"
-            + budgets
-            + s7
-            + "\n"
             + "Use natural language with action_type='speak',\n"
             "or structured formal/session_control via action_type='action' with JSON "
-            "(use the same personal names as in scheduling JSON for any `receiver` field):\n"
-            "contract (reference only if you are in visibility_set):\n"
-            "- propose: "
-            '{"negotiation_op":"formal","verb":"propose_contract","terms":{"price": number, '
-            '"regulatory_required": 0|1, "financing_required"|"financing_contingent": 0|1, '
-            '"valuation": ..., "payment": ..., "closing": ..., '
-            '"compliance": ..., "penalty": ...}}\n'
-            '- accept (any firm in c.parties): '
-            '{"negotiation_op":"formal","verb":"accept","contract_id":"optional"}\n'
-            '- reject (any firm in c.parties): '
-            '{"negotiation_op":"formal","verb":"reject_contract","contract_id":"optional"}\n'
-            '- amend ⇒ new contract, parent superseded: '
-            '{"negotiation_op":"formal","verb":"amend_contract","contract_id":"<parent>","terms":{...}}\n'
-            '- financing review ⇒ add investor to visibility: '
-            '{"negotiation_op":"formal","verb":"request_financing_review","contract_id":"optional"}\n'
-            '- regulatory review ⇒ add regulator to visibility: '
-            '{"negotiation_op":"formal","verb":"request_regulatory_review","contract_id":"optional"}\n'
-            '- share to current-session participant: '
-            '{"negotiation_op":"formal","verb":"contract_share","contract_id":"...","receiver":"<their personal name>"}\n'
-            '- sign after mutual principal accept: '
-            '{"negotiation_op":"formal","verb":"sign","contract_id":"optional"}\n'
-            '- investor financing commit or decline (visible contract): '
-            '{"negotiation_op":"formal","verb":"finance_commit","contract_id":"optional"} | '
-            '{"negotiation_op":"formal","verb":"finance_decline","contract_id":"optional","reason":"optional"}\n'
-            '- regulator approve or block (visible contract): '
-            '{"negotiation_op":"formal","verb":"regulatory_approve","contract_id":"optional"} | '
-            '{"negotiation_op":"formal","verb":"regulatory_block","contract_id":"optional","reason":"optional"}\n'
-            "- terminate.negotiation (consumes formal quota): principals end entire world; "
-            "investor/regulator exit only financing/regulatory negotiation path.\n"
-            '{"negotiation_op":"terminate_negotiation"}\n'
-            "- leave session (or equivalent terminate.session): "
-            '{"negotiation_op":"session_control","verb":"leave"} or '
-            '{"negotiation_op":"session_control","verb":"terminate_session"}\n'
         )
+        hist = self.visible_history.get(viewer, [])
+        if hist:
+            # 找到自己上次发言的位置，取之后的所有对话
+            viewer_name = self.display_name_for(viewer)
+            last_own = -1
+            for i in range(len(hist) - 1, -1, -1):
+                # hist line format: "[d=... sid=...] Name: content"  + 1
+                if hist[i].startswith(f"{viewer_name}:"):
+                    last_own = i
+                    break
+            if last_own >= 0:
+                last_turn = "\n".join(hist[last_own:])
+            else:
+                last_turn = text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest) + "\n".join(hist)
+        else:
+            # 首轮：会话说明 + 系统状态
+            last_turn = text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest)
+        # breakpoint()
         return Observation(
-            last_turn=text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest),
+            last_turn=last_turn,
             turn_number=self._global_turn_number(),
             available_actions=["speak", "non-verbal communication", "action", "none", "leave"],
         )
@@ -1246,7 +1189,10 @@ class NegotiationWorldController:
                     by_agent[agent] = by_agent.get(agent, 0) + 1
 
         viewers = tuple(sess.participants)
-        self._transcript.append((sess.session_id, agent, content, viewers))
+        self._transcript.append((sess.session_id, agent, content, viewers)) # [d={self.day} k={self.slot} sid={sess.session_id}] 
+        line = f"{self.display_name_for(agent)}: {content}"
+        for v in viewers:
+            self.visible_history.setdefault(v, []).append(line)
         self._audit_message_line(sess.session_id, agent, content)
 
     def record_session_message(self, agent: str, content: str) -> None:

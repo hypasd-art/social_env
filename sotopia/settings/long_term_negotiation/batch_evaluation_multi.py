@@ -315,6 +315,7 @@ async def run_long_term_negotiation_eval_batch_async_multi(
     nest_trace_dirs_by_model_time: bool = False,
     run_timestamp: str | None = None,
     negotiation_run_config: dict[str, Any] | None = None,
+    write_execution_record: bool = False,
 ) -> list[dict[str, Any]]:
     """与 ``run_long_term_negotiation_eval_batch_async`` 功能等价，但每条 episode 的终局 LLM
     评分通过 ``unweighted_aggregate_evaluate_multi`` 携带全部 N 名智能体评分，并后处理
@@ -345,6 +346,7 @@ async def run_long_term_negotiation_eval_batch_async_multi(
             nest_trace_dirs_by_model_time=nest_trace_dirs_by_model_time,
             run_timestamp=run_timestamp,
             negotiation_run_config=negotiation_run_config,
+            write_execution_record=write_execution_record,
         )
 
     return _post_process_rows_for_multi_agent(rows)
