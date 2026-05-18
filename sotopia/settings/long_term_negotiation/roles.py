@@ -1,32 +1,18 @@
 """与设计文档 §1.1 对齐的参与者集合与默认禀赋（仅存数值型资源键，便于 ``SystemState`` 使用）。
 
-本模块同时定义 **公司角色（firm_a..firm_d）** 与 **机构位（investor / regulator）**：
-
-- 双家公司 + 机构（``with_institutional`` lineup）：``firm_a`` + ``firm_b`` + 0~2 个机构位，
-  对应历史 ``bilat`` / ``tri`` / ``quartet`` 模式，与 design_1 §1.1 完全兼容。
-- 三家及以上公司（``firms_only`` lineup）：``firm_a``/``firm_b``/``firm_c``/``firm_d`` 的前缀，
-  ``investor`` / ``regulator`` 不在世界里；融资 / 监管路径自然成为 no-op，
-  controller 的 ``PRINCIPAL_PARTY_ROLES & session.participants`` 决定合同主体。
+本模块定义 **公司角色（firm_a..firm_d）**。
 """
 
 from __future__ import annotations
 
-#: design_1 §1.1 的 V1 经典 4 角色（``with_institutional`` lineup 用）。
-CANONICAL_NEGOTIATION_ROSTER_V1: frozenset[str] = frozenset(
-    {"firm_a", "firm_b", "investor", "regulator"}
-)
-
-#: 谈判世界中受支持的 **全部** canonical 角色键（含扩展公司位 firm_c / firm_d）。
+#: 谈判世界中受支持的 **全部** canonical 角色键（公司位 firm_a..firm_d）。
 CANONICAL_NEGOTIATION_ROSTER: frozenset[str] = frozenset(
-    {"firm_a", "firm_b", "firm_c", "firm_d", "investor", "regulator"}
+    {"firm_a", "firm_b", "firm_c", "firm_d"}
 )
 
 #: 公司角色稳定排序：``firms_only`` lineup 取本元组前缀作为 roster。
 FIRM_ROLES_ORDER: tuple[str, ...] = ("firm_a", "firm_b", "firm_c", "firm_d")
 FIRM_ROLES: frozenset[str] = frozenset(FIRM_ROLES_ORDER)
-
-#: 机构（非公司）角色：``with_institutional`` lineup 时按需挂入。
-INSTITUTIONAL_ROLES: frozenset[str] = frozenset({"investor", "regulator"})
 
 #: 叙事层为 **个人**（摊主 / 买主 / 个体出资方 / 基层监管联系人）；协议里仍用 ``firm_*`` 等 canonical id。
 ROLE_SUMMARY_EN: dict[str, str] = {
@@ -47,14 +33,6 @@ ROLE_SUMMARY_EN: dict[str, str] = {
         "Fourth independent operator (late entrant vendor or alternate supplier). "
         "You undercut or differentiate against overlapping offers; watch reputation and stock."
     ),
-    "investor": (
-        "Individual financier / informal capital partner (not a bank brand). "
-        "May join sessions when contingent funding is formally requested."
-    ),
-    "regulator": (
-        "Individual compliance / market-hall coordinator (approval or stall rules). "
-        "May join sessions when regulatory review is formally requested."
-    ),
 }
 
 #: 与默认人画像姓名一致；观测与 LLM 提示用展示名，控制器内部仍用 canonical roster 键。
@@ -63,8 +41,6 @@ ROLE_DEFAULT_DISPLAY_NAME_EN: dict[str, str] = {
     "firm_b": "Jordan Hayes",
     "firm_c": "Avery Singh",
     "firm_d": "Cameron Doyle",
-    "investor": "Morgan Bennett",
-    "regulator": "Casey Park",
 }
 
 
@@ -173,46 +149,15 @@ ROLE_PERSONA_EN: dict[str, dict[str, object]] = {
             "establish a brand where customers pay 15%+ premium over the lane average."
         ),
     },
-    "investor": {
-        "background_story": "Independent capital partner serving multiple micro-business operators.",
-        "personality": "selective and conservative",
-        "dialogue_voice": (
-            "Register: clipped professional, numbers-forward, mild skepticism as default tone. "
-            "Pacing: bullet-like conditions; pauses before 'non-negotiable' items. "
-            "Habits: reframes stories into runway/tranche vocabulary; asks for downside cases. "
-            "Avoid: emotional pep talks; vague promises without triggers."
-        ),
-        "core_skills": ["risk screening", "cashflow stress test", "contingent financing design"],
-        "survival_pressure": "Portfolio drawdown limit forces strict downside checks on every commitment.",
-        "daily_fixed_cost": 40.0,
-        "short_term_debt_due": 0.0,
-        "achievement_motivation": "Keep non-performing financing ratio below 5% while preserving deal volume.",
-    },
-    "regulator": {
-        "background_story": "Market-hall compliance coordinator balancing fairness and enforceability.",
-        "personality": "principled and strict",
-        "dialogue_voice": (
-            "Register: procedural, neutral third-person, cites stall rules and calendars. "
-            "Pacing: even and slow when de-escalating; firm terminality on hard lines. "
-            "Habits: summarizes dispute in two sentences then points to applicable clause. "
-            "Avoid: picking commercial winners; snark; personal gossip."
-        ),
-        "core_skills": ["rule interpretation", "procedural review", "dispute mediation"],
-        "survival_pressure": "Escalation quota penalizes delayed decisions on high-impact disputes.",
-        "daily_fixed_cost": 35.0,
-        "short_term_debt_due": 0.0,
-        "achievement_motivation": "Maintain transparent, consistent rulings with low appeal reversal rate.",
-    },
 }
 
 
 def validate_canonical_negotiation_roster(agent_names: tuple[str, ...]) -> None:
-    """严格按 design_1 §1.1 要求 V1 四方参与者（``strict_design_v1=True`` 时调用）。"""
+    """验证参与者集合均在 canonical roster 中。"""
     got = frozenset(agent_names)
-    if got != CANONICAL_NEGOTIATION_ROSTER_V1:
+    if not got.issubset(CANONICAL_NEGOTIATION_ROSTER):
         raise ValueError(
-            "Design §1.1 roster must be exactly "
-            f"{sorted(CANONICAL_NEGOTIATION_ROSTER_V1)}; got {sorted(agent_names)}"
+            f"Roster must be subset of {sorted(CANONICAL_NEGOTIATION_ROSTER)}; got {sorted(agent_names)}"
         )
 
 
@@ -249,21 +194,5 @@ def default_agent_resources_bundle() -> dict[str, dict[str, float]]:
             "liability": 0.0,
             "daily_fixed_cost": 90.0,
             "short_term_debt_due": 160.0,
-        },
-        "investor": {
-            "cash": 500.0,
-            "deployable_capital": 500.0,
-            "asset": 0.0,
-            "liability": 0.0,
-            "daily_fixed_cost": 40.0,
-            "short_term_debt_due": 0.0,
-        },
-        "regulator": {
-            "cash": 0.0,
-            "institutional_credibility": 80.0,
-            "asset": 0.0,
-            "liability": 0.0,
-            "daily_fixed_cost": 35.0,
-            "short_term_debt_due": 0.0,
         },
     }

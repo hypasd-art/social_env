@@ -88,6 +88,7 @@ from sotopia.generation_utils.output_parsers import PydanticOutputParser  # noqa
 from sotopia.settings.long_term_negotiation.llm_agent_profile_gen import (  # noqa: E402
     DEFAULT_COMPANY_LLM_ROLES,
     agenerate_negotiation_agent_profiles,
+    agenerate_negotiation_relationship_profiles,
     agent_profile_to_jsonable,
     parse_llm_econ_overrides,
 )
@@ -1033,12 +1034,6 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
         )
         agent_profile_source = "llm"
 
-    events = ltr.negotiation_event_scripts(args.tag)
-    for ev in events:
-        ev.save()
-    anchor_pk = events[0].pk if events else None
-    print(f"[save] EventScript anchor_pk={anchor_pk}")
-
     if args.incremental_diversity:
         print(
             f"[incremental-diversity] grouped by scene_type, sequential within group, "
@@ -1160,7 +1155,49 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
                 save_to_storage=True,
                 llm_roles=llm_roles_active,
             )
-        ltr.pairwise_strangers(agents, tag=agent_bind_tag, roles=active_roles)
+        # 优先 LLM 生成 pairwise 关系；失败回退到硬编码 pairwise_strangers
+        llm_relations = await agenerate_negotiation_relationship_profiles(
+            agents,
+            roles=active_roles,
+            model_name=agent_profile_model,
+            tag=agent_bind_tag,
+            scene_type=scene_type,
+            concurrency=max(1, args.concurrency),
+        )
+        if llm_relations:
+            # 用 LLM 输出直接创建 RelationshipProfile
+            from sotopia.settings.long_term_negotiation.llm_agent_profile_gen import (
+                _relation_draft_to_background_story,
+            )
+            n_rel = 0
+            for (role_a, role_b), draft in llm_relations.items():
+                ap_a = agents.get(role_a)
+                ap_b = agents.get(role_b)
+                if ap_a is None or ap_b is None:
+                    continue
+                pa_name = f"{getattr(ap_a, 'first_name', '')} {getattr(ap_a, 'last_name', '')}".strip()
+                pb_name = f"{getattr(ap_b, 'first_name', '')} {getattr(ap_b, 'last_name', '')}".strip()
+                story = _relation_draft_to_background_story(
+                    draft,
+                    name_a=pa_name or role_a,
+                    name_b=pb_name or role_b,
+                    role_a=role_a,
+                    role_b=role_b,
+                    tag=agent_bind_tag,
+                )
+                r = ltr.RelationshipProfile(
+                    agent_1_id=ap_a.pk,
+                    agent_2_id=ap_b.pk,
+                    relationship=ltr.RelationshipType.stranger,
+                    background_story=story,
+                    tag=agent_bind_tag,
+                )
+                r.save()
+                n_rel += 1
+            print(f"  [relationship] LLM-generated {n_rel} pairwise profiles")
+        else:
+            ltr.pairwise_strangers(agents, tag=agent_bind_tag, roles=active_roles)
+            print(f"  [relationship] fallback to hardcoded pairwise_strangers")
 
         # 解析 LLM 生成的经济参数（risk_preference / initial_reputation / resource_modifiers）
         agent_econ_overrides: dict[str, dict[str, Any]] = {}
@@ -1216,7 +1253,7 @@ async def main_async(args: argparse.Namespace, ltr: Any) -> int:
             quartet=False,
             params=params_eff,
             tag=args.tag,
-            event_anchor_pk=anchor_pk,
+            event_anchor_pk=None,
             v2_by_role=v2_agents,
             num_participants=n_agents,
             lineup=lineup,

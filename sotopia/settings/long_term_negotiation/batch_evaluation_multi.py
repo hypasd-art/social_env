@@ -35,9 +35,8 @@ from sotopia.messages.message_classes import ScriptEnvironmentResponse
 
 from .batch_evaluation import (
     _finite_number,
-    _mean_llm_dimension_scores,
-    _mean_llm_overall_from_aggregate,
     _mean_numeric_fields_across_rows,
+    _mean_two_dim_scores,
     build_eval_record,
     negotiation_eval_record_to_jsonable,
 )
@@ -212,21 +211,6 @@ def build_eval_record_multi(
         negotiation_run_config=negotiation_run_config,
     )
 
-    # 检测 llm_aggregate 中是否有额外的 p{N}_rate（p3/p4），补入 llm_dimension_scores
-    llm_dump = row.get("llm_aggregate")
-    if isinstance(llm_dump, dict):
-        llm_dim_scores: dict[str, dict[str, Any]] = row.setdefault("llm_dimension_scores", {})
-        for idx, rate_key in ((3, "p3_rate"), (4, "p4_rate")):
-            rate_val = llm_dump.get(rate_key)
-            if (
-                isinstance(rate_val, (tuple, list))
-                and len(rate_val) >= 2
-                and isinstance(rate_val[1], dict)
-            ):
-                dims = dict(rate_val[1])
-                dims.setdefault("overall_score", rate_val[0])
-                llm_dim_scores[f"agent{idx}"] = dims
-
     return row
 
 
@@ -235,18 +219,18 @@ def build_eval_record_multi(
 # ============================================================
 @contextlib.contextmanager
 def _patch_aggregator():
-    """在 ``llm_evaluation`` 模块中临时将 ``unweighted_aggregate_evaluate`` 替换为多智能体版本。
+    """在 ``sotopia.envs.evaluators`` 模块中临时将 ``unweighted_aggregate_evaluate`` 替换为多智能体版本。
 
     不影响原始文件；退出上下文后自动恢复。
     """
-    from . import llm_evaluation as _llm_eval_mod
+    import sotopia.envs.evaluators as _eval_mod
 
-    _original = _llm_eval_mod.unweighted_aggregate_evaluate
-    _llm_eval_mod.unweighted_aggregate_evaluate = unweighted_aggregate_evaluate_multi  # type: ignore[assignment]
+    _original = _eval_mod.unweighted_aggregate_evaluate
+    _eval_mod.unweighted_aggregate_evaluate = unweighted_aggregate_evaluate_multi  # type: ignore[assignment]
     try:
         yield
     finally:
-        _llm_eval_mod.unweighted_aggregate_evaluate = _original  # type: ignore[assignment]
+        _eval_mod.unweighted_aggregate_evaluate = _original  # type: ignore[assignment]
 
 
 # ============================================================
@@ -412,6 +396,7 @@ def aggregate_negotiation_eval_run_means_by_model(
     """
     from collections import defaultdict
 
+    two_dim_agg = _mean_two_dim_scores(rows)
     overall = {
         "n_episodes": len(rows),
         "terminal_success_rate": (
@@ -420,12 +405,8 @@ def aggregate_negotiation_eval_run_means_by_model(
         ),
         "rule_metrics_mean": _mean_numeric_fields_across_rows(rows, field="rule_metrics"),
     }
-    dim_means = _mean_llm_dimension_scores(rows)
-    if dim_means:
-        overall["llm_dimension_scores_mean"] = dim_means
-    ov = _mean_llm_overall_from_aggregate(rows)
-    if ov:
-        overall["llm_overall_mean"] = ov
+    if two_dim_agg and two_dim_agg.get("n_episodes_with_two_dim_eval", 0) > 0:
+        overall["two_dim_eval_aggregate"] = two_dim_agg
 
     # 按 agent_model 分组
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -444,12 +425,9 @@ def aggregate_negotiation_eval_run_means_by_model(
             "terminal_success_rate": (succ / n) if n else 0.0,
             "rule_metrics_mean": _mean_numeric_fields_across_rows(subset, field="rule_metrics"),
         }
-        sub_dim = _mean_llm_dimension_scores(subset)
-        if sub_dim:
-            entry["llm_dimension_scores_mean"] = sub_dim
-        sub_ov = _mean_llm_overall_from_aggregate(subset)
-        if sub_ov:
-            entry["llm_overall_mean"] = sub_ov
+        sub_two_dim = _mean_two_dim_scores(subset)
+        if sub_two_dim and sub_two_dim.get("n_episodes_with_two_dim_eval", 0) > 0:
+            entry["two_dim_eval_aggregate"] = sub_two_dim
         by_model[model_name] = entry
 
     return {"overall": overall, "by_model": by_model}
@@ -500,6 +478,7 @@ def print_evaluation_summary_multi(
 
         llm_overall = stats.get("llm_overall_mean")
         llm_dims = stats.get("llm_dimension_scores_mean")
+        sub_two_dim = stats.get("two_dim_eval_aggregate")
         if llm_overall and isinstance(llm_overall, dict):
             typer.echo("  [Overall LLM]")
             for k, v in llm_overall.items():
@@ -510,6 +489,20 @@ def print_evaluation_summary_multi(
                     typer.echo(f"  [{agent_key}]")
                     for dk, dv in dims.items():
                         typer.echo(f"    {dk:<26s} {_fmt(dv)}")
+        if sub_two_dim and isinstance(sub_two_dim, dict):
+            dim_means = sub_two_dim.get("cross_episode_means", {})
+            n_with = sub_two_dim.get("n_episodes_with_two_dim_eval", 0)
+            if dim_means:
+                typer.echo(f"  [Two-Dim Eval] (n={n_with})")
+                for dim_key, dim_label in (
+                    ("persona_style_consistency", "Persona & Style"),
+                    ("goal_behavioral_competence", "Goal & Behavior"),
+                ):
+                    mean_v = dim_means.get(f"{dim_key}_mean")
+                    min_v = dim_means.get(f"{dim_key}_min")
+                    max_v = dim_means.get(f"{dim_key}_max")
+                    if mean_v is not None:
+                        typer.echo(f"    {dim_label:<28s} mean={_fmt(mean_v)}  min={_fmt(min_v)}  max={_fmt(max_v)}")
 
     typer.echo("")
     typer.echo(typer.style("=" * 64, fg=typer.colors.BRIGHT_MAGENTA))
@@ -603,7 +596,8 @@ def _print_via_overall(rows: list[dict[str, Any]], overall: dict[str, Any]) -> N
 
     llm_overall = overall.get("llm_overall_mean")
     llm_dims = overall.get("llm_dimension_scores_mean")
-    if llm_overall or llm_dims:
+    two_dim_agg = overall.get("two_dim_eval_aggregate")
+    if llm_overall or llm_dims or two_dim_agg:
         typer.echo(typer.style("\n── LLM Evaluation (mean) ──", fg=typer.colors.YELLOW, bold=True))
         if llm_overall and isinstance(llm_overall, dict):
             for k, v in llm_overall.items():
@@ -614,6 +608,20 @@ def _print_via_overall(rows: list[dict[str, Any]], overall: dict[str, Any]) -> N
                     typer.echo(f"  [{agent_key}]")
                     for dk, dv in dims.items():
                         typer.echo(f"    {dk:<26s} {_fmt(dv)}")
+        if two_dim_agg and isinstance(two_dim_agg, dict):
+            dim_means = two_dim_agg.get("cross_episode_means", {})
+            n_with = two_dim_agg.get("n_episodes_with_two_dim_eval", 0)
+            if dim_means:
+                typer.echo(f"  Two-Dim Eval (n={n_with})")
+                for dim_key, dim_label in (
+                    ("persona_style_consistency", "Persona & Style Consistency"),
+                    ("goal_behavioral_competence", "Goal & Behavioral Competence"),
+                ):
+                    mean_v = dim_means.get(f"{dim_key}_mean")
+                    min_v = dim_means.get(f"{dim_key}_min")
+                    max_v = dim_means.get(f"{dim_key}_max")
+                    if mean_v is not None:
+                        typer.echo(f"    {dim_label:<34s} mean={_fmt(mean_v)}  min={_fmt(min_v)}  max={_fmt(max_v)}")
 
     typer.echo("")
     typer.echo(typer.style("=" * 64, fg=typer.colors.BRIGHT_BLACK))

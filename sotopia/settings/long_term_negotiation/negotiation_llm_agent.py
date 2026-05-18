@@ -56,7 +56,7 @@ Return ONLY one JSON object matching: {format_instructions}
 [Scheduling — Invite]
 Submit ONE session_request per slot via action_type='action', e.g.:
   {"negotiation_op":"session_request","proposed_participants":["Alice","Bob"],"purpose":"discuss delivery"}
-Or pass: {"negotiation_op":"sched_pass"}. Q_i=1: at most one request per slot. No formal budget consumed.
+Or pass: {"negotiation_op":"sched_pass"}. Only one request per slot. No formal budget consumed.
 
 [Scheduling — Response]
 Respond via action_type='action':
@@ -66,19 +66,18 @@ Or {"negotiation_op":"sched_pass"}. Accept at most ONE invite targeting you; oth
 
 [Session — speak / action]
 Use action_type='speak' for natural language, or action_type='action' with JSON for formal ops:
-  propose:     {"negotiation_op":"formal","verb":"propose_contract","terms":{price,regulatory_required,financing_required,valuation,payment,closing,compliance,penalty}}
+  propose:     {"negotiation_op":"formal","verb":"propose_contract","terms":{price,...},"parties":["Name1","Name2"]} 
   accept:      {"negotiation_op":"formal","verb":"accept","contract_id":"optional"}
   reject:      {"negotiation_op":"formal","verb":"reject_contract","contract_id":"optional"}
   amend:       {"negotiation_op":"formal","verb":"amend_contract","contract_id":"<parent>","terms":{...}}
   sign:        {"negotiation_op":"formal","verb":"sign","contract_id":"optional"}
   share:       {"negotiation_op":"formal","verb":"contract_share","contract_id":"...","receiver":"<name>"}
-  financing:   {"negotiation_op":"formal","verb":"request_financing_review|finance_commit|finance_decline","contract_id":"optional"}
-  regulatory:  {"negotiation_op":"formal","verb":"request_regulatory_review|regulatory_approve|regulatory_block","contract_id":"optional"}
-  terminate:   {"negotiation_op":"terminate_negotiation"}
   leave:       {"negotiation_op":"session_control","verb":"leave"} or {"negotiation_op":"session_control","verb":"terminate_session"}
 All JSON uses personal names. Only include fields shown in examples.
 
-Interaction history: {history}
+Interaction history: 
+
+{history}
 """
 
 # . 
@@ -120,7 +119,7 @@ Do not focus on a single counterparty; do not accept before evaluating at least 
 AVAILABLE_ACTION_RULES = """
 [Scheduling — Invite]
 Submit ONE session_request per slot via action_type='action', e.g.:
-  {"negotiation_op":"session_request","proposed_participants":["Alice","Bob"],"purpose":"discuss delivery"}
+  {"negotiation_op":"session_request","proposed_participants":["Alice","Bob"],"purpose":"discuss delivery"} 
 Or pass: {"negotiation_op":"sched_pass"}. Q_i=1: at most one request per slot. No formal budget consumed.
 
 [Scheduling — Response]
@@ -131,15 +130,12 @@ Or {"negotiation_op":"sched_pass"}. Accept at most ONE invite targeting you; oth
 
 [Session — speak / action]
 Use action_type='speak' for natural language, or action_type='action' with JSON for formal ops:
-  propose:     {"negotiation_op":"formal","verb":"propose_contract","terms":{price,regulatory_required,financing_required,valuation,payment,closing,compliance,penalty}}
+  propose:     {"negotiation_op":"formal","verb":"propose_contract","terms":{price,...},"parties":["Name1","Name2"]}  
   accept:      {"negotiation_op":"formal","verb":"accept","contract_id":"optional"}
   reject:      {"negotiation_op":"formal","verb":"reject_contract","contract_id":"optional"}
   amend:       {"negotiation_op":"formal","verb":"amend_contract","contract_id":"<parent>","terms":{...}}
   sign:        {"negotiation_op":"formal","verb":"sign","contract_id":"optional"}
   share:       {"negotiation_op":"formal","verb":"contract_share","contract_id":"...","receiver":"<name>"}
-  financing:   {"negotiation_op":"formal","verb":"request_financing_review|finance_commit|finance_decline","contract_id":"optional"}
-  regulatory:  {"negotiation_op":"formal","verb":"request_regulatory_review|regulatory_approve|regulatory_block","contract_id":"optional"}
-  terminate:   {"negotiation_op":"terminate_negotiation"}
   leave:       {"negotiation_op":"session_control","verb":"leave"} or {"negotiation_op":"session_control","verb":"terminate_session"}
 All JSON uses personal names. Only include fields shown in examples.
 """
@@ -172,6 +168,7 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
             )
         self._role_goal_addon = role_goal_addon
         self._negotiation_prompt_template = tpl
+        self.name = self._prompt_self_label()
 
     def bind_episode_display_names(self, mapping: Mapping[str, str]) -> None:
         """与 ``LongTermNegotiationEnv.agent_display_names`` 对齐（如 profile 落库后的人名）。"""
@@ -246,89 +243,10 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
             )
         return "\n".join(parts)
 
-    def _agent_design_digest_footer(self) -> str:
-        """设计期稠密提示：接在私密 ``goal`` 末尾，利用单条 user 消息的近因效应。"""
-        lines: list[str] = []
-        lines.append(
-            "[agent_design_digest — internal playbook; do not read aloud unless in-character; "
-            "numeric costs below are design-time defaults unless Environment state overrides]"
-        )
-
-        profile = getattr(self, "profile", None)
-        if profile is not None:
-            sub: list[str] = ["[stored AgentProfile snapshot]"]
-            nm = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip()
-            if nm:
-                sub.append(f"Name: {nm}")
-            occ = str(getattr(profile, "occupation", "") or "").strip()
-            if occ:
-                sub.append(f"Occupation: {occ}")
-            age = getattr(profile, "age", 0) or 0
-            if age:
-                sub.append(f"Age: {age}")
-            g = str(getattr(profile, "gender", "") or "").strip()
-            if g:
-                sub.append(f"Gender: {g}")
-            pub = str(getattr(profile, "public_info", "") or "").strip()
-            if pub:
-                sub.append(f"Public info: {truncate_chars(pub, 520)}")
-            big5 = str(getattr(profile, "big_five", "") or "").strip()
-            if big5:
-                sub.append(f"Big Five (text): {truncate_chars(big5, 420)}")
-            pv = str(getattr(profile, "personality_and_values", "") or "").strip()
-            if pv:
-                sub.append(f"Personality & values: {truncate_chars(pv, 520)}")
-            dms = str(getattr(profile, "decision_making_style", "") or "").strip()
-            if dms:
-                sub.append(f"Decision style: {truncate_chars(dms, 360)}")
-            morals = getattr(profile, "moral_values", None) or []
-            if morals:
-                sub.append("Moral values: " + ", ".join(str(x) for x in morals[:12]))
-            sch = getattr(profile, "schwartz_personal_values", None) or []
-            if sch:
-                sub.append("Schwartz values: " + ", ".join(str(x) for x in sch[:12]))
-            sec = str(getattr(profile, "secret", "") or "").strip()
-            if sec:
-                sub.append(f"Secret (private): {truncate_chars(sec, 320)}")
-            lines.append("\n".join(sub))
-
-        persona = ROLE_PERSONA_EN.get(self.agent_name)
-        if isinstance(persona, dict):
-            econ: list[str] = ["[roster persona — design-time economics & north star]"]
-            for key in ("daily_fixed_cost", "short_term_debt_due"):
-                if key in persona:
-                    econ.append(f"{key}={persona[key]}")
-            sp = str(persona.get("survival_pressure", "") or "").strip()
-            if sp:
-                econ.append(f"Survival pressure: {truncate_chars(sp, 360)}")
-            am = str(persona.get("achievement_motivation", "") or "").strip()
-            if am:
-                econ.append(f"Achievement north star: {truncate_chars(am, 360)}")
-            dv = str(persona.get("dialogue_voice", "") or "").strip()
-            if dv:
-                econ.append(f"DialogueVoice (full): {truncate_chars(dv, 900)}")
-            lines.append("\n".join(econ))
-
-        body = "\n\n".join(lines)
-        return truncate_chars(body, 4500) if len(body) > 4500 else body
-
-    async def get_goal_context(self) -> str:
-        """返回当前回合的完整私有上下文（goal + 记忆 + 人设摘要），供 env 注入 observation 的 [system] 块。"""
-        parts: list[str] = []
-        if self._goal:
-            parts.append(self._goal)
-        mem_block = await self.memory.arecent(self.memory_inject_lines)
-        if mem_block:
-            parts.append("[Recent episode memory]\n" + mem_block)
-        digest = self._agent_design_digest_footer()
-        if digest:
-            parts.append(digest)
-        return "\n\n".join(parts)
-
     async def aact(self, obs: Observation) -> AgentAction:
         self.recv_message("Environment", obs)
         if self._goal is None:
-            breakpoint()
+            raise Exception("Goal is not set")
             obs_nl = self._rewrite_nl_for_prompt(self.inbox[0][1].to_natural_language())
             viewer_ctx = self._action_instruction_block(obs)
             self._goal = await agenerate_goal(
@@ -348,23 +266,13 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
 
         if len(obs.available_actions) == 1 and "none" in obs.available_actions:
             return AgentAction(action_type="none", argument="", to=[])
+        system_digest = obs.system_digest
 
-        # mem_block = await self.memory.arecent(self.memory_inject_lines)
         goal_effective = self._goal
-        # if mem_block:
-        #     goal_effective = (
-        #         (self._goal or "")
-        #         + "\n\n[Recent episode memory]\n"
-        #         + mem_block
-        #     )
-        digest = self._agent_design_digest_footer()
-        if digest:
-            goal_effective = (goal_effective or "").rstrip() + "\n\n" #  + digest
 
         custom_template = fill_template(
             self._negotiation_prompt_template,
             action_instructions=self._action_instruction_block(obs),
-
         )
 
         # ``agenerate_action`` / ``AgentAction`` 校验 ``to`` 时要求收件人 ∈ context.agent_names。
@@ -380,7 +288,7 @@ class NegotiationSocialLLMAgent(SocialLLMAgent):
         _labels = [self._canonical_display_names.get(n, n) for n in rk]
         agent_names_nl = sorted(frozenset(rk) | frozenset(_labels))
 
-        raw_history = "\n".join(f"{y.to_natural_language()}" for _, y in self.inbox)
+        raw_history = "".join(f"{y.to_natural_language()}" for _, y in self.inbox) # \n
         history = self._rewrite_nl_for_prompt(raw_history) # 序列化后经 _rewrite_nl_for_prompt 将 canonical 名称（firm_a）替换为显示名（Avery Singh）
 
         action = await agenerate_action(
@@ -466,7 +374,6 @@ def build_negotiation_social_llm_agents(
         econ_line = ("\ndesign_economics:\n " + "\n- ".join(design_econ)) if design_econ else ""
         label = disp_map.get(role, default_display_name_for_role(role))
         ag.goal = (
-            # f"[you] {label}\n"
             f"persona:\n{persona_line}\n\n\n{econ_line}\n"
             "[protocol_discipline]\n"
             "- Each turn: read the **latest** Environment message for allowed `action_type` values and JSON shapes.\n"

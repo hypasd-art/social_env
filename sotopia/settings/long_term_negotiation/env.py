@@ -322,6 +322,69 @@ class LongTermNegotiationEnv(MessengerMixin):
             for k in self.system_state.agent_keys
         }
 
+    def _phase_notify_agents(self, prev_ph: Phase | None) -> None:
+        """阶段转换时：将当前阶段、可用操作、agent 状态变量推入每个 agent 的 inbox。
+        不触发模型输出（仅写入 agent 对话历史，下次 aact 时作为上下文可见）。"""
+        ph = self.ctrl.phase
+        if ph is None or ph == prev_ph:
+            return
+        day, slot = self.ctrl.day, self.ctrl.slot
+        D = self.ctrl.params.D
+
+        phase_ops = {
+            Phase.SCHEDULE_INVITE: (
+                f"SCHEDULING INVITATION PHASE — Day {day} of {D}, Slot {slot}.\n"
+                "You may propose session invitations. Available operations:\n"
+                "  session_request (propose meeting with proposed_participants + purpose)\n"
+                "  sched_pass (skip this slot)"
+            ),
+            Phase.SCHEDULE_RESPONSE: (
+                f"SCHEDULING RESPONSE PHASE — Day {day} of {D}, Slot {slot}.\n"
+                "Respond to pending invitations. Available operations:\n"
+                "  session_response (requester + accept=true/false)\n"
+                "  session_response_batch (respond to multiple at once)\n"
+                "  sched_pass (skip this slot)"
+            ),
+            Phase.SESSION: (
+                f"ACTIVE SESSION — Day {day}, Slot {slot}.\n"
+                "Available operations:\n"
+                "  speak: natural language\n"
+                "  action: propose_contract / accept_contract / sign_contract / amend_contract\n"
+                "  session_control: leave / terminate_session"
+            ),
+            Phase.POST_SESSION: (
+                f"POST-SESSION — Day {day}, Slot {slot}.\n"
+                "Session concluded. System processing outcomes. No action required."
+            ),
+            Phase.END_OF_DAY: (
+                f"END OF DAY {day}.\n"
+                "Daily settlement and resource updates applied. No action required."
+            ),
+            Phase.TERMINATED: "NEGOTIATION TERMINATED.",
+            Phase.INIT: "Episode initializing.",
+        }
+        desc = phase_ops.get(ph, f"Phase: {ph.value}")
+
+        # # 汇总 agent 资源与状态变量
+        # status_lines: list[str] = []
+        # for k in self.system_state.agent_keys:
+        #     r = self.system_state.agent_resources.get(k, {})
+        #     cash = r.get("cash", "?")
+        #     status_lines.append(f"  {self.ctrl.display_name_for(k)}: cash={cash}")
+        #     psych = self._psych_by_agent.get(k)
+        #     if psych is not None:
+        #         psych_text = psych_state_to_prompt_addon(
+        #             psych,
+        #             expose_threshold=self.params.expose_psych_threshold_in_observation,
+        #         )
+        #         if psych_text.strip():
+        #             for line in psych_text.strip().split("\n"):
+        #                 status_lines.append(f"    {line.strip()}")
+
+        msg = "---------------------------------------------------------------------------------------\n" + desc + "\n---------------------------------------------------------------------------------------\n" #  + "\n─ Agent status ─\n" + "\n".join(status_lines)
+        for a in self.agents:
+            self.agents[a].recv_message("Environment", SimpleMessage(message=msg))
+
     async def run_episode_async(self, max_macro_steps: int = 2000) -> str:
         """推进直到 ``Phase.TERMINATED`` 或步数上限。返回 terminal 原因字符串。"""
         self.ctrl.reset()
@@ -337,21 +400,34 @@ class LongTermNegotiationEnv(MessengerMixin):
         )
 
         steps = 0
+        prev_phase: Phase | None = None
         while not self.ctrl.terminated() and steps < max_macro_steps:
             steps += 1
             ph = self.ctrl.phase
             if ph == Phase.SCHEDULE_INVITE:
-                if self.ctrl.slot == 1:
-                    self._ext_tick("start_of_day")
-                self._ext_tick("before_scheduling")
+                if prev_phase != Phase.SCHEDULE_INVITE:
+                    if self.ctrl.slot == 1:
+                        self._ext_tick("start_of_day")
+                    self._ext_tick("before_scheduling")
+                    self._phase_notify_agents(prev_ph=prev_phase)
+                    prev_phase = Phase.SCHEDULE_INVITE
                 await self._macro_sched_invite()
                 self.ctrl.finish_invite_phase()
             elif ph == Phase.SCHEDULE_RESPONSE:
+                if prev_phase != Phase.SCHEDULE_RESPONSE:
+                    self._phase_notify_agents(prev_ph=prev_phase)
+                    prev_phase = Phase.SCHEDULE_RESPONSE
                 await self._macro_sched_response()
                 self.ctrl.resolve_scheduling()
             elif ph == Phase.SESSION:
+                if prev_phase != Phase.SESSION:
+                    self._phase_notify_agents(prev_ph=prev_phase)
+                    prev_phase = Phase.SESSION
                 await self._macro_session_turn()
             elif ph == Phase.POST_SESSION:
+                if prev_phase != Phase.POST_SESSION:
+                    self._phase_notify_agents(prev_ph=prev_phase)
+                    prev_phase = Phase.POST_SESSION
                 ps_day, ps_slot = self.ctrl.day, self.ctrl.slot
                 self._ext_tick("after_session", day=ps_day, slot=ps_slot, phase=Phase.POST_SESSION)
                 pst: list[str] = []
@@ -382,6 +458,9 @@ class LongTermNegotiationEnv(MessengerMixin):
                 self.ctrl.advance_after_post_session()
                 self._ext_tick("end_of_slot", day=ps_day, slot=ps_slot, phase=Phase.POST_SESSION)
             elif ph == Phase.END_OF_DAY:
+                if prev_phase != Phase.END_OF_DAY:
+                    self._phase_notify_agents(prev_ph=prev_phase)
+                    prev_phase = Phase.END_OF_DAY
                 closing = self.ctrl.day
                 self._ext_tick("end_of_day", day=closing, phase=Phase.END_OF_DAY)
                 triggered: list[str] = []
@@ -456,6 +535,7 @@ class LongTermNegotiationEnv(MessengerMixin):
         async def one(a: str) -> None:
             obs = self.ctrl.observation_for_scheduling_invite(a, self._digest(a))
             act = await self.agents[a].aact(obs)
+            self.agents[a].recv_message(a, SimpleMessage(message=self.agents[a].name + ": " + act.to_natural_language() + "\n"))
             pl = parse_agent_action_payload(act.argument) if act.action_type == "action" else None
             if pl:
                 self.ctrl.submit_invite_json(a, pl)
@@ -468,6 +548,7 @@ class LongTermNegotiationEnv(MessengerMixin):
         async def one(a: str) -> None:
             obs = self.ctrl.observation_for_scheduling_response(a, self._digest(a))
             act = await self.agents[a].aact(obs)
+            self.agents[a].recv_message(a, SimpleMessage(message=self.agents[a].name + ": " + act.to_natural_language() + "\n"))
             pl = parse_agent_action_payload(act.argument) if act.action_type == "action" else None
             if pl:
                 self.ctrl.submit_response_json(a, pl)

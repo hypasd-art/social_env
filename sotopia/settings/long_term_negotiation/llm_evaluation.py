@@ -54,16 +54,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sotopia.database import EnvironmentProfile, SotopiaDimensions
+from sotopia.database import EnvironmentProfile
 from sotopia.database import AgentProfile, EnvAgentComboStorage, RelationshipProfile
-from sotopia.database.base_models import LLMEvalBaseModel
 from sotopia.benchmark_v2_data_models import AgentProfileV2
 
-from sotopia.envs.evaluators import (
-    EpisodeLLMEvaluator,
-    EvaluationForAgents,
-    unweighted_aggregate_evaluate,
-)
 from sotopia.messages import ScriptEnvironmentResponse
 
 from .env import LongTermNegotiationEnv
@@ -85,9 +79,9 @@ from .scenario_loader import (
 )
 from .types import (
     NEGOTIATION_LINEUP_FIRMS_ONLY,
-    NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    NEGOTIATION_LINEUP_FIRMS_ONLY,
     NegotiationTimelineParams,
-    SESSION_SPEAKER_ROLE_ORDER,
+    SESSION_FIRMS_ONLY_ROLE_ORDER,
     SUPPORTED_NEGOTIATION_LINEUPS,
     negotiation_role_order,
 )
@@ -101,13 +95,14 @@ class LongTermNegotiationEvalResult:
     rule_metrics: dict[str, float]
     llm_aggregate: ScriptEnvironmentResponse | None
     rule_evaluation_state: dict[str, Any] = field(default_factory=dict)
+    two_dim_eval: Any = field(default=None)
 
 
 def default_negotiation_roster(
     *,
     quartet: bool | None = None,
     num_participants: int | None = None,
-    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    lineup: str = NEGOTIATION_LINEUP_FIRMS_ONLY,
 ) -> tuple[str, ...]:
     """按 ``lineup`` 取前 N 名 canonical 角色（与设计 §4.3 发言顺序一致）。
 
@@ -435,7 +430,6 @@ async def run_llm_negotiation_episode_evaluation(
     environment_profile_pk: str | None = None,
     max_macro_steps: int = 4000,
     run_terminal_llm_eval: bool = True,
-    evaluation_dimension_model: type[LLMEvalBaseModel] = SotopiaDimensions,
     history_max_action_log: int | None = 500,
     model_trace_dir: Path | str | None = None,
     model_trace_tag: str | None = None,
@@ -538,7 +532,7 @@ async def run_llm_negotiation_episode_evaluation(
     else:
         n = 4 if quartet else 2
 
-    effective_lineup = lineup or lineup_from_scen or NEGOTIATION_LINEUP_WITH_INSTITUTIONAL
+    effective_lineup = lineup or lineup_from_scen or NEGOTIATION_LINEUP_FIRMS_ONLY
     if effective_lineup not in SUPPORTED_NEGOTIATION_LINEUPS:
         raise ValueError(
             f"unknown negotiation lineup {effective_lineup!r}; expected one of "
@@ -613,36 +607,22 @@ async def run_llm_negotiation_episode_evaluation(
                 model_trace_stem=trace_stem,
             )
 
-        llm_agg: ScriptEnvironmentResponse | None = None
+        two_dim_result = None
         if run_terminal_llm_eval:
-            ds_block: str | None = None
-            raw_ds = gm.get("dialogue_style") if isinstance(gm.get("dialogue_style"), dict) else None
-            if isinstance(raw_ds, dict):
-                ev = raw_ds.get("evaluation_requirements_en")
-                if isinstance(ev, str) and ev.strip():
-                    ds_block = ev.strip()
-            history = format_negotiation_episode_for_llm_eval(
-                env,
+            from .negotiation_dimension_eval import evaluate_negotiation_episode_two_dim
+
+            two_dim_result = await evaluate_negotiation_episode_two_dim(
+                model_dict=model_dict,
+                env=env,
                 max_action_log=history_max_action_log,
-                dialogue_eval_rubric_en=ds_block,
             )
-            evaluator = EpisodeLLMEvaluator(
-                model_name=model_dict["env"],
-                response_format_class=EvaluationForAgents[evaluation_dimension_model],  # type: ignore[valid-type]
-            )
-            raw = await evaluator.__acall__(
-                turn_number=-1,
-                history=history,
-                messages=None,
-                num_agents_override=len(roster),
-            )
-            llm_agg = unweighted_aggregate_evaluate(list(raw))
 
         return LongTermNegotiationEvalResult(
             terminal=terminal,
             rule_metrics=rule_metrics,
-            llm_aggregate=llm_agg,
+            llm_aggregate=None,
             rule_evaluation_state=rule_eval_state,
+            two_dim_eval=two_dim_result,
         )
     finally:
         if trace_token is not None:

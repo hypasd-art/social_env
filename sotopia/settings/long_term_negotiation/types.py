@@ -7,27 +7,19 @@ from enum import Enum
 from typing import Any
 
 
-# §4.3 deterministic speaker order among participants — V1 ``with_institutional`` lineup
-# （历史 bilat / tri / quartet 模式取该元组前缀）。
-SESSION_SPEAKER_ROLE_ORDER: tuple[str, ...] = ("firm_a", "firm_b", "investor", "regulator")
-
-# `firms_only` lineup 的 speaker 顺序（3+ 公司、不含 investor / regulator）。
+# `firms_only` lineup 的 speaker 顺序。
 SESSION_FIRMS_ONLY_ROLE_ORDER: tuple[str, ...] = ("firm_a", "firm_b", "firm_c", "firm_d")
+SESSION_SPEAKER_ROLE_ORDER = SESSION_FIRMS_ONLY_ROLE_ORDER  # 别名，兼容脚本直接导入
 
 #: 受支持的 lineup 字符串（写入 ``EnvironmentProfile.game_metadata.lineup``）。
-NEGOTIATION_LINEUP_WITH_INSTITUTIONAL: str = "with_institutional"
 NEGOTIATION_LINEUP_FIRMS_ONLY: str = "firms_only"
-SUPPORTED_NEGOTIATION_LINEUPS: frozenset[str] = frozenset(
-    {NEGOTIATION_LINEUP_WITH_INSTITUTIONAL, NEGOTIATION_LINEUP_FIRMS_ONLY}
-)
+SUPPORTED_NEGOTIATION_LINEUPS: frozenset[str] = frozenset({NEGOTIATION_LINEUP_FIRMS_ONLY})
 
 
 def negotiation_role_order(lineup: str) -> tuple[str, ...]:
-    """按 ``lineup`` 选 4 槽 canonical 角色顺序（取前 N 即可拿到 N 人 roster）。"""
+    """按 ``lineup`` 返回 canonical 角色顺序（取前 N 即可拿到 N 人 roster）。"""
     if lineup == NEGOTIATION_LINEUP_FIRMS_ONLY:
         return SESSION_FIRMS_ONLY_ROLE_ORDER
-    if lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL:
-        return SESSION_SPEAKER_ROLE_ORDER
     raise ValueError(
         f"unknown negotiation lineup {lineup!r}; expected one of "
         f"{sorted(SUPPORTED_NEGOTIATION_LINEUPS)}"
@@ -63,8 +55,6 @@ class NegotiationTimelineParams:
 
     max_session_rounds: int = 16
 
-    financing_buffer: float = 0.0
-
     #: §1.2 / §1.1 — 校验融资可承诺额度、监管硬违规等；评测可关。
     enforce_formal_budget_checks: bool = True
 
@@ -94,7 +84,7 @@ class NegotiationTimelineParams:
     #: 控制器在当日 ``end_day_tick`` 末尾终止世界；``None`` 关闭此判定（默认）。
     failure_stagnation_calendar_days: int | None = None
 
-    #: §10 — 是否在观测 digest 中暴露 ``threshold`` / ``approval_threshold``（默认隐藏）。
+    #: §10 — 是否在观测 digest 中暴露 ``threshold``（默认隐藏）。
     expose_psych_threshold_in_observation: bool = False
 
 
@@ -128,17 +118,7 @@ class ResolvedSession:
     participants: tuple[str, ...]
 
 
-def default_financing() -> dict[str, Any]:
-    return {"required": 0, "status": "not_required", "actor": None}
-
-
-def default_regulatory() -> dict[str, Any]:
-    return {"required": 0, "status": "not_required", "actor": None}
-
-
-# 合同主体（principal）= 所有公司角色。当 lineup 是 ``with_institutional`` 时世界中只有
-# firm_a / firm_b 两个公司，``PRINCIPAL_PARTY_ROLES & agent_names`` 自然回退为旧的两家公司语义；
-# 当 lineup 是 ``firms_only`` 时，3+ 家公司全部计入主体。
+# 合同主体（principal）= 所有公司角色。
 PRINCIPAL_PARTY_ROLES: frozenset[str] = frozenset(
     {"firm_a", "firm_b", "firm_c", "firm_d"}
 )
@@ -163,8 +143,8 @@ class NegotiationContract:
     acceptances: dict[str, bool | None] = field(default_factory=dict)
     visibility: set[str] = field(default_factory=set)
     signatures: dict[str, bool] = field(default_factory=dict)
-    financing: dict[str, Any] = field(default_factory=default_financing)
-    regulatory: dict[str, Any] = field(default_factory=default_regulatory)
+    financing: dict[str, Any] = field(default_factory=lambda: {"required": 0, "status": "not_required", "actor": None})
+    regulatory: dict[str, Any] = field(default_factory=lambda: {"required": 0, "status": "not_required", "actor": None})
     history: list[dict[str, Any]] = field(default_factory=list)
     created_day: int = 0
     created_slot: int = 0

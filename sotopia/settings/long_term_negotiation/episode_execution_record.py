@@ -195,10 +195,19 @@ def build_episode_execution_record(
             "regulatory": dict(getattr(c, "regulatory", {}) or {}),
             "history": list(getattr(c, "history", []) or []),
         }
+    st = getattr(env, "system_state", None)
+    system_resources_end: dict[str, Any] | None = None
+    if st is not None:
+        ar = getattr(st, "agent_resources", {}) or {}
+        system_resources_end = {str(k): dict(v) for k, v in ar.items()}
+
     payload: dict[str, Any] = {
-        "schema": "sotopia.long_term_negotiation.execution_record.v1_2",
+        "schema": "sotopia.long_term_negotiation.execution_record.v1_3",
         "terminal": ctrl.terminal,
         "macro_steps_used": int(getattr(env, "last_episode_macro_steps", 0) or 0),
+        "agent_names": list(getattr(ctrl, "agent_names", []) or []),
+        "agent_display_names": dict(getattr(env, "agent_display_names", {}) or {}),
+        "system_state_agent_resources_end": system_resources_end,
         "messenger_inbox": _serialize_messenger_inbox(env),
         "visible_history_by_agent": _visible_history_full(ctrl),
         "execution_timeline": list(getattr(ctrl, "execution_timeline", []) or []),

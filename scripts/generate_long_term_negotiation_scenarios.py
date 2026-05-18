@@ -62,7 +62,6 @@ LOCAL_DATA_DIR = Path(os.path.expanduser("~/.sotopia/data"))
 
 from sotopia.benchmark_v2_data_models import (  # noqa: E402
     Contract,
-    make_event_script_from_dict,
     make_initial_state_snapshot,
     upgrade_agent_profile,
     upgrade_environment_profile,
@@ -427,99 +426,8 @@ def _social_graph_edges(roles: tuple[str, ...]) -> list[dict[str, Any]]:
                 variant = (i * max(1, n_roles) + j) % len(firm_competition_templates)
                 edges.append(_firm_pair_edge(a, b, variant))
                 continue
-            if not a_f and not b_f:
-                pa = _persona_for_role(a)
-                pb = _persona_for_role(b)
-                la = _HANDWRITTEN_ROLE_OCCUPATION.get(a, a)
-                lb = _HANDWRITTEN_ROLE_OCCUPATION.get(b, b)
-                rel = "institutional_co_gatekeeping"
-                trust_bias = 0.18
-                note = (
-                    "Investor and regulator align on calendar/process while principals compete commercially; "
-                    "this edge is coordination, not symmetric profit rivalry."
-                )
-                s_it = (
-                    f"{la} treats {lb} as shaping enforcement cadence that capital conditions reference; "
-                    f"signal reads {str(pb.get('personality', 'balanced'))}."
-                )
-                t_is = (
-                    f"{lb} treats {la} as shaping risk appetite that bleeds into what principals dare promise; "
-                    f"signal reads {str(pa.get('personality', 'balanced'))}."
-                )
-                edges.append(
-                    {
-                        "source": a,
-                        "target": b,
-                        "relation": rel,
-                        "trust_bias": float(trust_bias),
-                        "history_note": note,
-                        "source_impression_of_target": s_it,
-                        "target_impression_of_source": t_is,
-                        "competitive_axis": False,
-                    }
-                )
-                continue
-
-            # 恰一方为 firm_*：与 investor / regulator 的张力边
-            if a_f and not b_f:
-                firm_r, inst_r = a, b
-                f_prof, i_prof = _persona_for_role(firm_r), _persona_for_role(inst_r)
-            else:
-                firm_r, inst_r = b, a
-                f_prof, i_prof = _persona_for_role(firm_r), _persona_for_role(inst_r)
-            firm_label = _HANDWRITTEN_ROLE_OCCUPATION.get(firm_r, firm_r)
-            if inst_r == "investor":
-                rel = "financing_leverage_review"
-                trust_bias = -0.16
-                note = (
-                    "Investor ties drawdowns to how competitive pressure reshapes milestones; "
-                    "the firm negotiates under contingent capital risk."
-                )
-                view_firm_of_inst = (
-                    f"{firm_label} sees the investor as tightening liquidity when parallel rivals destabilize pricing; "
-                    f"expects {str(i_prof.get('personality', 'balanced'))}-driven covenant scrutiny."
-                )
-                view_inst_of_firm = (
-                    f"the investor reads {firm_label} as exposed to repricing in a rival-heavy lane; "
-                    f"tracks {str((f_prof.get('core_skills') or ['execution'])[0])} execution risk."
-                )
-            elif inst_r == "regulator":
-                rel = "compliance_visibility_pressure"
-                trust_bias = -0.14
-                note = (
-                    "Regulator attention rises when multi-party rivalry creates incentives to cut corners "
-                    "on disclosures or stall hygiene."
-                )
-                view_firm_of_inst = (
-                    f"{firm_label} treats the regulator as binding visibility and calendar risk on competitive tactics; "
-                    f"expects {str(i_prof.get('personality', 'balanced'))} enforcement tone."
-                )
-                view_inst_of_firm = (
-                    f"the regulator maps {firm_label} as a principal whose rivalry-driven promotions may trigger audits "
-                    f"or complaints from parallel vendors."
-                )
-            else:
-                rel = "principal_auxiliary_interface"
-                trust_bias = -0.1
-                note = "Auxiliary roster tie: keep diligence without collapsing into firm-firm rivalry semantics."
-                view_firm_of_inst = f"{firm_label} keeps a cautious dossier on the {inst_r}."
-                view_inst_of_firm = f"the {inst_r} keeps a cautious dossier on {firm_label}."
-            if a == firm_r:
-                s_it, t_is = view_firm_of_inst, view_inst_of_firm
-            else:
-                s_it, t_is = view_inst_of_firm, view_firm_of_inst
-            edges.append(
-                {
-                    "source": a,
-                    "target": b,
-                    "relation": rel,
-                    "trust_bias": float(trust_bias),
-                    "history_note": note,
-                    "source_impression_of_target": s_it,
-                    "target_impression_of_source": t_is,
-                    "competitive_axis": False,
-                }
-            )
+            # 无机构角色，跳过非 firm 对
+            continue
     return edges
 
 
@@ -1016,96 +924,6 @@ def save_combo(env: EnvironmentProfile, agent_roles: tuple[str, ...], agents: di
     return combo
 
 
-def negotiation_event_scripts(tag: str, *, max_calendar_days: int | None = None) -> list[Any]:
-    """构造长期谈判场景共用的 ``EventScript`` 列表。
-
-    约束：**每个自然日 1..max_calendar_days 至少有一条在日终（``END_OF_DAY``）触发的脚本**。
-    已有剧情的日（如 day2 / day5）保留原效果；其余日补 ``broadcast`` 占位脚本（不改变 ``SystemState``）。
-    ``max_calendar_days`` 默认取 ``bilateral_timeline_presets()`` 中最大的 ``D``，以覆盖全部预设时间轴。
-    """
-    from sotopia.events.event_engine import calendar_days_with_end_of_day_scripts
-
-    if max_calendar_days is None:
-        max_calendar_days = max(p.D for _, p in bilateral_timeline_presets())
-    if max_calendar_days < 1:
-        raise ValueError(f"max_calendar_days must be >= 1, got {max_calendar_days}")
-
-    ev1 = make_event_script_from_dict(
-        {
-            "name": "ltr_market_rumor_day2",
-            "category": "news",
-            "visibility": "public",
-            "intraday": False,
-            "apply_days": [2],
-            "description": "Sector rumor increases perceived financing pressure (portfolio narrative bump).",
-            "effects": [
-                {"op": "delta", "target": "public_opinion.firm_a", "value": -0.5},
-                {"op": "delta", "target": "public_opinion.firm_b", "value": 0.25},
-            ],
-            "tag": tag,
-        }
-    )
-    ev2 = make_event_script_from_dict(
-        {
-            "name": "ltr_policy_calendar_day5",
-            "category": "policy",
-            "visibility": "partial",
-            "intraday": False,
-            "apply_days": [5],
-            "description": "Regulatory filing window tightened (observe-only macro shock hook).",
-            "effects": [
-                {"op": "delta", "target": "market_state.regulatory_stringency", "value": 0.05},
-            ],
-            "tag": tag,
-        }
-    )
-    ev3 = make_event_script_from_dict(
-        {
-            "name": "ltr_market_micro_dynamics_day3",
-            "category": "market",
-            "visibility": "public",
-            "intraday": False,
-            "apply_days": [3],
-            "description": "Daily micro-dynamics: foot traffic, freshness pressure, and hawker noise shift.",
-            "effects": [
-                {"op": "delta", "target": "market_state.foot_traffic", "value": 0.06},
-                {"op": "delta", "target": "market_state.competitor_quality_signal", "value": -0.04},
-                {"op": "delta", "target": "market_state.hawker_noise_level", "value": 0.08},
-            ],
-            "tag": tag,
-        }
-    )
-    out: list[Any] = [ev1, ev2, ev3]
-    covered = calendar_days_with_end_of_day_scripts(out)
-    for d in range(1, int(max_calendar_days) + 1):
-        if d in covered:
-            continue
-        out.append(
-            make_event_script_from_dict(
-                {
-                    "name": f"ltr_daily_eod_placeholder_day{d}",
-                    "category": "market",
-                    "visibility": "public",
-                    "intraday": False,
-                    "apply_days": [d],
-                    "description": (
-                        f"Placeholder end-of-day EventScript for calendar day {d} "
-                        "(no state change; satisfies one-script-per-day coverage)."
-                    ),
-                    "effects": [
-                        {
-                            "op": "broadcast",
-                            "target": "_daily_calendar_placeholder",
-                            "value": None,
-                        }
-                    ],
-                    "tag": tag,
-                }
-            )
-        )
-    return out
-
-
 def save_negotiation_agent_profiles_v2(
     agents_by_role: dict[str, AgentProfile],
     *,
@@ -1394,12 +1212,6 @@ def main() -> int:
     pairwise_strangers(agents, tag=args.tag, roles=active_roles_global)
     v2_agents = save_negotiation_agent_profiles_v2(agents, tag=args.tag, roles=active_roles_global)
 
-    events = negotiation_event_scripts(args.tag)
-    for ev in events:
-        ev.save()
-    anchor_pk = events[0].pk if events else None
-    print(f"[save] EventScript x {len(events)} anchor_pk={anchor_pk}")
-
     combos_by_codename: dict[str, EnvAgentComboStorage] = {}
     legacy_env_objs: list[EnvironmentProfile] = []
     env_modes_by_codename: dict[str, str] = {}
@@ -1452,7 +1264,7 @@ def main() -> int:
                 quartet=False,
                 params=params,
                 tag=args.tag,
-                event_anchor_pk=anchor_pk,
+                event_anchor_pk=None,
                 v2_by_role=v2_agents,
                 num_participants=n_agents,
                 lineup=lineup,

@@ -36,7 +36,6 @@ from typing import Any, Mapping
 
 from .types import (
     NEGOTIATION_LINEUP_FIRMS_ONLY,
-    NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
     NegotiationTimelineParams,
     SUPPORTED_NEGOTIATION_LINEUPS,
     negotiation_role_order,
@@ -325,11 +324,6 @@ def _collect_scenario_bound_news_threads(
         add("multi_party_default_blame_and_partial_performance")
     if num_participants >= 4:
         add("late_entrant_undercut_and_anchor_customer_poaching")
-    if "investor" in roles:
-        add("informal_financing_spreads_and_contingent_drawdown_clauses")
-    if "regulator" in roles:
-        add("stall_rules_enforcement_and_selective_inspection_calendar")
-
     # --- 日历跨度：长周期场景多一条宏观流动性叙事（仍由 codename+rule 种子决定是否在正文中强调）---
     if calendar_days is not None and int(calendar_days) >= 8:
         add("multi_week_working_capital_rollover_and_supplier_credit_tightening")
@@ -693,7 +687,7 @@ def _build_news_briefs_from_rule(
     rule: Mapping[str, Any],
     scenario_text: str = "",
     environment_context: Mapping[str, Any] | None = None,
-    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    lineup: str = NEGOTIATION_LINEUP_FIRMS_ONLY,
     num_participants: int = 2,
     calendar_days: int | None = None,
 ) -> list[dict[str, Any]]:
@@ -906,7 +900,7 @@ def build_negotiation_game_metadata_bundle(
     params: NegotiationTimelineParams,
     *,
     num_participants: int | None = None,
-    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    lineup: str = NEGOTIATION_LINEUP_FIRMS_ONLY,
     design_doc: str = "social_env/design_1.md",
     scenario_text: str = "",
     outcome_rule_entropy: str | None = None,
@@ -933,7 +927,7 @@ def build_negotiation_game_metadata_bundle(
     if n < 2 or n > 4:
         raise ValueError(f"num_participants must be 2..4, got {n}")
     strict = (
-        lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and quartet and n == 4
+        lineup == NEGOTIATION_LINEUP_FIRMS_ONLY and quartet and n == 4
     )
     env_ctx = _infer_environment_context(
         codename=codename, scenario_text=scenario_text, scene_type_hint=scene_type_hint
@@ -967,7 +961,7 @@ def build_negotiation_game_metadata_bundle(
         "quartet": quartet,
         "num_participants": n,
         "lineup": lineup,
-        "institutional_roles_enabled": bool(lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL),
+        "institutional_roles_enabled": bool(lineup == NEGOTIATION_LINEUP_FIRMS_ONLY),
         "contract_check_mode": "rule_engine_without_institutional",
         "contract_check_rules": {
             "financing_rule": (
@@ -1029,7 +1023,7 @@ class NegotiationStoredScenario:
     strict_design_v1: bool
     params: NegotiationTimelineParams
     #: 角色阵型："with_institutional"（含 investor/regulator）或 "firms_only"（3+ 家公司）。
-    lineup: str = NEGOTIATION_LINEUP_WITH_INSTITUTIONAL
+    lineup: str = NEGOTIATION_LINEUP_FIRMS_ONLY
 
     @property
     def roles(self) -> tuple[str, ...]:
@@ -1068,7 +1062,7 @@ def parsed_scenario_from_game_metadata(env_pk: str, *, gm: Mapping[str, Any]) ->
                 f"environment_profile {env_pk}: game_metadata.num_participants must be 2..4, "
                 f"got {num_participants!r}"
             )
-    lineup = str(gm.get("lineup") or NEGOTIATION_LINEUP_WITH_INSTITUTIONAL)
+    lineup = str(gm.get("lineup") or NEGOTIATION_LINEUP_FIRMS_ONLY)
     if lineup not in SUPPORTED_NEGOTIATION_LINEUPS:
         raise ValueError(
             f"environment_profile {env_pk}: game_metadata.lineup must be in "

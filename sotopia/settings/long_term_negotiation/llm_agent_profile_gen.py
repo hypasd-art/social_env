@@ -1,13 +1,11 @@
 """LLM 驱动的谈判 **人格画像**：每个角色对应**一个具体的人**（不是公司/机构本身）。
 
-- 角色键 ``firm_a`` / ``firm_b`` / ``firm_c`` / ``firm_d`` / ``investor`` / ``regulator`` 仅用于规则
+- 角色键 ``firm_a`` / ``firm_b`` / ``firm_c`` / ``firm_d`` 仅用于规则
   世界寻位；落库的 ``AgentProfile`` 必须是**自然人**：人名、年龄、个性、职业、价值观，不出现
   ``Firm`` / ``Corp`` / ``Inc`` / ``Ltd`` / ``Holdings`` / ``Authority`` 等公司化字眼。
 - 人格应**多样化**：菜场摊主、话痨摊主、情绪化后和好、迷信吉利数、早起迷糊摊主等与「冷静公司谈判人」
   同等合法；由 ``_PERSONA_ARCHETYPES`` 轮转 + 提示词约束共同引导 LLM。
-- 默认对**所有公司角色**（``firm_a`` / ``firm_b`` / ``firm_c`` / ``firm_d``）走 LLM 采样；
-  ``investor`` / ``regulator`` 用预置 **named human personas** 静态落库（同样是人，不是机构）。
-- 可选 ``llm_roles=tuple(sorted(CANONICAL_NEGOTIATION_ROSTER))`` 让全部六个角色都走 LLM。
+- 默认对**所有公司角色**（``firm_a`` / ``firm_b`` / ``firm_c`` / ``firm_d``）走 LLM 采样。
 
 事实性资源、规则参数仍由 ``roles.py`` / ``default_agent_resources_bundle`` 提供。
 
@@ -29,9 +27,8 @@ from sotopia.generation_utils.output_parsers import PydanticOutputParser
 
 from .roles import CANONICAL_NEGOTIATION_ROSTER, FIRM_ROLES_ORDER, ROLE_SUMMARY_EN
 
-# 默认对 **所有公司角色** 都用大模型（含 firm_c / firm_d）；机构位见 ``STATIC_INSTITUTIONAL_ROLES``。
+# 默认对 **所有公司角色** 都用大模型（含 firm_c / firm_d）。
 DEFAULT_COMPANY_LLM_ROLES: tuple[str, ...] = tuple(FIRM_ROLES_ORDER)
-STATIC_INSTITUTIONAL_ROLES: frozenset[str] = frozenset({"investor", "regulator"})
 
 
 class LLMNegotiationAgentDraft(BaseModel):
@@ -167,7 +164,7 @@ Constraints (MUST follow):
   * ``risk_preference``: Match to the archetype — a decisive-competitor or opportunistic-bargainer is typically
     "seeking"; a risk-averse-stabilizer or principled-guardian is "averse"; others may be "neutral".
   * ``initial_reputation``: Incumbents with long lane history get 65-85; regular traders get 40-60;
-    newcomers/challengers get 20-35; a regulator with strong public trust gets 70-90.
+    newcomers/challengers get 20-35.
   * ``resource_modifiers``: Financially pressured roles should have cash < 1.0 (e.g. 0.6-0.85) and
     short_term_debt_due > 1.0 (e.g. 1.15-1.4). Cash-rich roles get cash > 1.0 (e.g. 1.15-1.5).
     The modifiers MUST reflect the persona's market position and survival pressure.
@@ -364,54 +361,6 @@ DEFAULT_HUMAN_PERSONAS: dict[str, dict[str, Any]] = {
         "Agreeableness: medium; Neuroticism: low",
         "secret": "",
     },
-    "investor": {
-        "first_name": "Morgan",
-        "last_name": "Bennett",
-        "age": 52,
-        "occupation": "Senior capital partner",
-        "gender": "male",
-        "gender_pronoun": "he/him",
-        "public_info": (
-            "Seasoned principal with a value-investing temperament; ties contingent capital to disclosure "
-            "quality and milestone delivery."
-        ),
-        "personality_and_values": (
-            "Methodical and risk-aware; prefers tranche logic over headline numbers and rewards "
-            "counterparties who hit calendar gates."
-        ),
-        "decision_making_style": (
-            "Calendar- and session-protocol aware; tranche commitments track formal moves rather than narrative."
-        ),
-        "moral_values": ["fairness", "harm-avoidance"],
-        "schwartz_personal_values": ["security", "achievement"],
-        "big_five": "Openness: medium; Conscientiousness: high; Extraversion: medium; "
-        "Agreeableness: medium; Neuroticism: low",
-        "secret": "",
-    },
-    "regulator": {
-        "first_name": "Casey",
-        "last_name": "Park",
-        "age": 49,
-        "occupation": "Senior regulatory officer",
-        "gender": "female",
-        "gender_pronoun": "she/her",
-        "public_info": (
-            "Career civil servant with a procedural temperament; treats filing calendars and substantive "
-            "thresholds as non-negotiable guardrails."
-        ),
-        "personality_and_values": (
-            "Procedurally exacting; favors written substantive thresholds over informal verbal commitments "
-            "and is patient with revisions that respect the calendar."
-        ),
-        "decision_making_style": (
-            "Calendar- and session-protocol aware; written thresholds beat ad-hoc verbal undertakings."
-        ),
-        "moral_values": ["fairness", "harm-avoidance"],
-        "schwartz_personal_values": ["security", "tradition"],
-        "big_five": "Openness: medium; Conscientiousness: high; Extraversion: low; "
-        "Agreeableness: medium; Neuroticism: low",
-        "secret": "",
-    },
 }
 
 
@@ -435,8 +384,6 @@ _CORPORATE_NAME_TOKENS: tuple[str, ...] = (
     "bureau",
     "agency",
     "office",
-    "investor",
-    "regulator",
 )
 
 
@@ -646,7 +593,7 @@ async def agenerate_negotiation_agent_profiles(
     save_to_storage: bool = True,
     llm_roles: Sequence[str] | None = None,
 ) -> dict[str, AgentProfile]:
-    """对 ``roles`` 装配 ``AgentProfile``：默认所有公司角色走 LLM，``investor``/``regulator`` 静态模板。
+    """对 ``roles`` 装配 ``AgentProfile``：所有公司角色走 LLM。
 
     ``llm_roles`` 显式传入 ``tuple(sorted(CANONICAL_NEGOTIATION_ROSTER))`` 等价于六角色均 LLM。
     """
@@ -766,8 +713,183 @@ __all__ = [
     "DEFAULT_COMPANY_LLM_ROLES",
     "DEFAULT_HUMAN_PERSONAS",
     "LLMNegotiationAgentDraft",
-    "STATIC_INSTITUTIONAL_ROLES",
+    "LLMNegotiationRelationshipDraft",
     "agenerate_negotiation_agent_profiles",
+    "agenerate_negotiation_relationship_profiles",
     "agent_profile_to_jsonable",
     "build_static_negotiation_agent_profile",
+    "parse_llm_econ_overrides",
 ]
+
+
+# ============================================================
+# LLM 生成 pairwise 关系画像
+# ============================================================
+
+_RELATIONSHIP_PROMPT_TEMPLATE = """Generate a pairwise relationship profile between two individual negotiators
+in a long-horizon multi-day market negotiation.
+
+Each person is a real individual (stall owner, buyer, vendor, etc.) — NOT a corporation.
+Below are their profiles from the same episode.
+
+Person A (role={role_a}):
+- Name: {name_a}
+- Occupation: {occupation_a}
+- Personality & values: {personality_a}
+- Big Five: {big_five_a}
+- Decision style: {decision_style_a}
+- Public info: {public_info_a}
+
+Person B (role={role_b}):
+- Name: {name_b}
+- Occupation: {occupation_b}
+- Personality & values: {personality_b}
+- Big Five: {big_five_b}
+- Decision style: {decision_style_b}
+- Public info: {public_info_b}
+
+Scene type: {scene_type}
+
+CRITICAL — the relationship MUST be differentiated and specific:
+- **relation tag**: a short label capturing the competitive dynamic (e.g. "price-war-rivals",
+  "grudging-coopetition", "quality-vs-price-standoff", "late-entrant-vs-incumbent",
+  "mutual-suspicion", "customer-poaching-feud"). DO NOT use generic labels like "stranger" or "neutral".
+- **trust_bias**: a float in [-0.6, 0.4] — negative for competitive/distrustful pairs,
+  positive only if the profiles suggest genuine warm history. Most firm-firm pairs should be negative
+  (competition). Different pairs in the same episode MUST have different trust_bias values.
+- **history_note**: one sentence describing the pre-episode competitive dynamic between these two
+  specific people, reflecting their occupations and personalities. NOT a generic template.
+- **impression_a_of_b**: how A views B — based on A's personality and B's profile. Use personal names.
+- **impression_b_of_a**: how B views A — based on B's personality and A's profile. Use personal names.
+  Must be DIFFERENT from impression_a_of_b (asymmetric perspectives).
+
+Output ONLY a JSON object:
+{{
+  "relation": "...",
+  "trust_bias": -0.30,
+  "history_note": "...",
+  "impression_a_of_b": "...",
+  "impression_b_of_a": "..."
+}}"""
+
+
+class LLMNegotiationRelationshipDraft(BaseModel):
+    """LLM 生成的 pairwise 关系画像。"""
+
+    OPENAI_DISABLE_STRICT_JSON_SCHEMA: ClassVar[bool] = True
+
+    relation: str = Field(
+        description="Short label for the competitive dynamic between these two people."
+    )
+    trust_bias: float = Field(
+        default=-0.30,
+        description="Float in [-0.6, 0.4] — negative for competitive/distrustful, positive for warm history."
+    )
+    history_note: str = Field(
+        description="One sentence describing pre-episode competitive dynamic between these two specific people."
+    )
+    impression_a_of_b: str = Field(
+        description="How person A views person B, based on A's personality and B's profile."
+    )
+    impression_b_of_a: str = Field(
+        description="How person B views person A, based on B's personality and A's profile. Must differ from impression_a_of_b."
+    )
+
+
+def _relation_draft_to_background_story(
+    draft: LLMNegotiationRelationshipDraft,
+    *,
+    name_a: str,
+    name_b: str,
+    role_a: str,
+    role_b: str,
+    tag: str,
+) -> str:
+    """将 LLM 草稿转为 RelationshipProfile.background_story 格式。"""
+    return (
+        f"{name_a} and {name_b} are {draft.relation.replace('-', ' ')}. "
+        f"{draft.history_note} "
+        f"{name_a} sees {name_b} as: {draft.impression_a_of_b} "
+        f"{name_b} sees {name_a} as: {draft.impression_b_of_a}"
+    )
+
+
+async def agenerate_negotiation_relationship_profiles(
+    agents: dict[str, Any],
+    *,
+    roles: tuple[str, ...],
+    model_name: str,
+    tag: str,
+    scene_type: str = "",
+    concurrency: int = 4,
+) -> dict[tuple[str, str], LLMNegotiationRelationshipDraft]:
+    """对 roles 中所有 pair 调 LLM 生成差异化 pairwise 关系。
+
+    返回 ``{(role_a, role_b): LLMNegotiationRelationshipDraft}``。
+    """
+    sem = asyncio.Semaphore(max(1, concurrency))
+
+    def _profile_text(ap: Any) -> dict[str, str]:
+        return {
+            "name": f"{getattr(ap, 'first_name', '')} {getattr(ap, 'last_name', '')}".strip(),
+            "occupation": str(getattr(ap, "occupation", "") or ""),
+            "personality": str(getattr(ap, "personality_and_values", "") or ""),
+            "big_five": str(getattr(ap, "big_five", "") or ""),
+            "decision_style": str(getattr(ap, "decision_making_style", "") or ""),
+            "public_info": str(getattr(ap, "public_info", "") or ""),
+        }
+
+    async def _one_pair(role_a: str, role_b: str) -> tuple[tuple[str, str], LLMNegotiationRelationshipDraft | BaseException]:
+        async with sem:
+            ap_a = agents.get(role_a)
+            ap_b = agents.get(role_b)
+            pa = _profile_text(ap_a) if ap_a is not None else {}
+            pb = _profile_text(ap_b) if ap_b is not None else {}
+            try:
+                parser = PydanticOutputParser[LLMNegotiationRelationshipDraft](
+                    pydantic_object=LLMNegotiationRelationshipDraft
+                )
+                draft = await agenerate(
+                    model_name=model_name,
+                    template=_RELATIONSHIP_PROMPT_TEMPLATE,
+                    input_values=dict(
+                        role_a=role_a,
+                        role_b=role_b,
+                        name_a=pa.get("name", role_a),
+                        name_b=pb.get("name", role_b),
+                        occupation_a=pa.get("occupation", ""),
+                        occupation_b=pb.get("occupation", ""),
+                        personality_a=pa.get("personality", ""),
+                        personality_b=pb.get("personality", ""),
+                        big_five_a=pa.get("big_five", ""),
+                        big_five_b=pb.get("big_five", ""),
+                        decision_style_a=pa.get("decision_style", ""),
+                        decision_style_b=pb.get("decision_style", ""),
+                        public_info_a=pa.get("public_info", ""),
+                        public_info_b=pb.get("public_info", ""),
+                        scene_type=scene_type or "general_negotiation",
+                    ),
+                    output_parser=parser,
+                    structured_output=False,
+                )
+                return (role_a, role_b), draft
+            except BaseException as exc:
+                return (role_a, role_b), exc
+
+    pairs = [(roles[i], roles[j]) for i in range(len(roles)) for j in range(i + 1, len(roles))]
+    if not pairs:
+        return {}
+
+    tasks = [_one_pair(a, b) for a, b in pairs]
+    results = await asyncio.gather(*tasks)
+
+    out: dict[tuple[str, str], LLMNegotiationRelationshipDraft] = {}
+    for key, payload in results:
+        if isinstance(payload, BaseException):
+            short = str(payload)
+            if len(short) > 200:
+                short = short[:200] + "..."
+            print(f"[relationship][warn] pair={key} LLM draft failed: {short}")
+        else:
+            out[key] = payload
+    return out

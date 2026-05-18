@@ -49,7 +49,7 @@ from .scenario_loader import (
 )
 from .types import (
     NEGOTIATION_LINEUP_FIRMS_ONLY,
-    NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+    NEGOTIATION_LINEUP_FIRMS_ONLY,
     NegotiationTimelineParams,
     SUPPORTED_NEGOTIATION_LINEUPS,
 )
@@ -327,7 +327,7 @@ async def run_extended_llm_negotiation_episode_evaluation(
     else:
         n = 4 if quartet else 2
 
-    effective_lineup = lineup or lineup_from_scen or NEGOTIATION_LINEUP_WITH_INSTITUTIONAL
+    effective_lineup = lineup or lineup_from_scen or NEGOTIATION_LINEUP_FIRMS_ONLY
     if effective_lineup not in SUPPORTED_NEGOTIATION_LINEUPS:
         raise ValueError(
             f"unknown negotiation lineup {effective_lineup!r}; expected one of "

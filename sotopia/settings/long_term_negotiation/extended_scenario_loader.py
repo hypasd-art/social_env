@@ -353,23 +353,6 @@ def _build_v2_psych_variables(
                     "target_margin": str(round(rng.uniform(0.05, 0.20), 3)),
                 }
 
-        elif role == "investor":
-            entry["threshold"] = round(float(rng.uniform(0.15, 0.5)), 3)
-            entry["risk_exposure"] = round(float(rng.uniform(0.2, 0.7)), 3)
-            entry["reputation_anchor"] = round(float(rng.uniform(60.0, 90.0)), 1)
-            entry["private_information"] = {
-                "deployable_capital_reserve": str(round(rng.uniform(100.0, 600.0), 2)),
-            }
-
-        elif role == "regulator":
-            entry["approval_threshold"] = round(float(rng.uniform(0.5, 0.9)), 3)
-            entry["institutional_credibility_anchor"] = round(float(rng.uniform(65.0, 95.0)), 1)
-            entry["public_mandate"] = (
-                "enforce fair-trade and consumer-protection rules"
-                if rng.random() > 0.5
-                else "ensure market stability and prevent predatory practices"
-            )
-
         result[role] = entry
 
     return result
@@ -393,7 +376,7 @@ def build_extended_negotiation_game_metadata_bundle(
     （V2 的确定性种子仅由 codename + lineup + num_participants + scenario_text 决定）。
     """
     from .types import (
-        NEGOTIATION_LINEUP_WITH_INSTITUTIONAL,
+        NEGOTIATION_LINEUP_FIRMS_ONLY,
         SUPPORTED_NEGOTIATION_LINEUPS,
     )
     from .scenario_loader import (
@@ -401,7 +384,7 @@ def build_extended_negotiation_game_metadata_bundle(
         DIALOGUE_STYLE_SYNTHESIS_APPEND_EN,
     )
 
-    effective_lineup = lineup or NEGOTIATION_LINEUP_WITH_INSTITUTIONAL
+    effective_lineup = lineup or NEGOTIATION_LINEUP_FIRMS_ONLY
     if effective_lineup not in SUPPORTED_NEGOTIATION_LINEUPS:
         raise ValueError(
             f"unknown negotiation lineup {effective_lineup!r}; expected one of "
@@ -418,7 +401,7 @@ def build_extended_negotiation_game_metadata_bundle(
     timeline_meta["external_event_specs"] = list(timeline_meta.get("external_event_specs") or ())
 
     strict = (
-        effective_lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL and quartet and n == 4
+        effective_lineup == NEGOTIATION_LINEUP_FIRMS_ONLY and quartet and n == 4
     )
 
     env_ctx = _infer_environment_context(
@@ -466,19 +449,9 @@ def build_extended_negotiation_game_metadata_bundle(
         "num_participants": n,
         "lineup": effective_lineup,
         "institutional_roles_enabled": bool(
-            effective_lineup == NEGOTIATION_LINEUP_WITH_INSTITUTIONAL
+            effective_lineup == NEGOTIATION_LINEUP_FIRMS_ONLY
         ),
         "contract_check_mode": "rule_engine_without_institutional",
-        "contract_check_rules": {
-            "financing_rule": (
-                "if financing_required=1 then auto-check with rule_engine using terms+resources; "
-                "set financing.status in {committed,declined} deterministically"
-            ),
-            "regulatory_rule": (
-                "if regulatory_required=1 then auto-check with rule_engine using policy_hard_violation "
-                "and compliance terms; set regulatory.status in {approved,blocked}"
-            ),
-        },
         "timeline": timeline_meta,
         "design_doc": design_doc,
         "codename": codename,
@@ -511,8 +484,7 @@ def build_extended_negotiation_game_metadata_bundle(
             "firm_firm_competition": "mandatory",
             "description": (
                 "Synthetic benchmarks: every firm_a..firm_d pair is modeled as direct commercial rivalry "
-                "(negative trust_bias in social_graph.edges). Firm↔investor/regulator encodes funding/compliance "
-                "asymmetry; investor↔regulator is institutional coordination, not profit rivalry."
+                "(negative trust_bias in social_graph.edges)."
             ),
         },
     }

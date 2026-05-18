@@ -159,6 +159,31 @@ def _overall_from_llm_rate_field(v: Any) -> float | None:
     return None
 
 
+def _mean_two_dim_scores(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """对 two_dim_eval.aggregate_stats 中 persona/goal 两维度做跨 episode 均值。"""
+    dims = ("persona_style_consistency", "goal_behavioral_competence")
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    n_with = 0
+    for row in rows:
+        tde = row.get("two_dim_eval")
+        if not isinstance(tde, dict):
+            continue
+        agg = tde.get("aggregate_stats")
+        if not isinstance(agg, dict):
+            continue
+        n_with += 1
+        for dim in dims:
+            for suffix in ("_mean", "_min", "_max"):
+                key = f"{dim}{suffix}"
+                v = agg.get(key)
+                if isinstance(v, (int, float)) and math.isfinite(float(v)):
+                    sums[key] = sums.get(key, 0.0) + float(v)
+                    counts[key] = counts.get(key, 0) + 1
+    mean_out = {k: sums[k] / counts[k] for k in sorted(sums) if counts.get(k, 0) > 0}
+    return {"n_episodes_with_two_dim_eval": n_with, "cross_episode_means": mean_out}
+
+
 def _mean_llm_overall_from_aggregate(rows: Sequence[dict[str, Any]]) -> dict[str, float]:
     """从 ``llm_aggregate`` 的 ``p1_rate`` / ``p2_rate`` 抽取 overall（float 或 tuple 首元）求平均。"""
     p1s: list[float] = []
@@ -188,8 +213,7 @@ def aggregate_negotiation_eval_run_means(rows: Sequence[dict[str, Any]]) -> dict
 
     - ``n_episodes`` / ``terminal_success_rate``；
     - ``rule_metrics_mean``：``rule_metrics`` 内所有有限数值字段的跨 episode 均值；
-    - ``llm_dimension_scores_mean``：若存在 ``llm_dimension_scores``，按 agent、按维度均值；
-    - ``llm_overall_mean``：若存在 ``llm_aggregate`` 的 p1/p2 overall，则单独给出均值（与维度均值互补）。
+    - ``two_dim_eval_aggregate``：双维度评测的跨 episode 均值。
     """
     n = len(rows)
     succ = sum(1 for r in rows if str(r.get("terminal") or "") == "success")
@@ -198,12 +222,9 @@ def aggregate_negotiation_eval_run_means(rows: Sequence[dict[str, Any]]) -> dict
         "terminal_success_rate": (succ / n) if n else 0.0,
         "rule_metrics_mean": _mean_numeric_fields_across_rows(rows, field="rule_metrics"),
     }
-    dim_means = _mean_llm_dimension_scores(rows)
-    if dim_means:
-        out["llm_dimension_scores_mean"] = dim_means
-    overall = _mean_llm_overall_from_aggregate(rows)
-    if overall:
-        out["llm_overall_mean"] = overall
+    two_dim_agg = _mean_two_dim_scores(rows)
+    if two_dim_agg and two_dim_agg.get("n_episodes_with_two_dim_eval", 0) > 0:
+        out["two_dim_eval_aggregate"] = two_dim_agg
     return out
 
 
@@ -220,20 +241,6 @@ def build_eval_record(
     scenario_codename: str | None = None,
     negotiation_run_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    llm_dump: Any = None
-    llm_dimension_scores: dict[str, dict[str, Any]] = {}
-    if result.llm_aggregate is not None:
-        llm_dump = result.llm_aggregate.model_dump(mode="python")
-        for idx, rate_key in ((1, "p1_rate"), (2, "p2_rate")):
-            rate_val = llm_dump.get(rate_key)
-            if (
-                isinstance(rate_val, (tuple, list))
-                and len(rate_val) >= 2
-                and isinstance(rate_val[1], dict)
-            ):
-                dims = dict(rate_val[1])
-                dims.setdefault("overall_score", rate_val[0])
-                llm_dimension_scores[f"agent{idx}"] = dims
     row = {
         "experiment_tag": experiment_tag,
         "seq": seq,
@@ -244,10 +251,13 @@ def build_eval_record(
         "terminal": result.terminal,
         "rule_metrics": result.rule_metrics,
         "rule_evaluation_state": result.rule_evaluation_state,
-        "llm_aggregate": llm_dump,
     }
-    if llm_dimension_scores:
-        row["llm_dimension_scores"] = llm_dimension_scores
+    if result.two_dim_eval is not None:
+        tde = result.two_dim_eval
+        row["two_dim_eval"] = {
+            "agent_evaluations": getattr(tde, "agent_evaluations", {}),
+            "aggregate_stats": getattr(tde, "aggregate_stats", {}),
+        }
     if environment_profile_pk:
         row["environment_profile_pk"] = environment_profile_pk
     if scenario_codename:
@@ -447,7 +457,7 @@ async def run_long_term_negotiation_eval_batch_async(
             env_pk=env_meta_pk or env_pk,
             scenario_codename=codename_display,
             rule_metrics=dict(res.rule_metrics),
-            scored_llm=res.llm_aggregate is not None,
+            scored_llm=res.two_dim_eval is not None,
             tag=tag,
         )
         log.info("── %s", dl)

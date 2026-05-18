@@ -474,7 +474,7 @@ def _run_eval_subprocess(
 
 
 def _watch_trace_files(trace_dir, run_id: str, seen: dict[str, int]):
-    """Scan JSONL trace files for new model output lines (uses byte position to handle partial writes)."""
+    """Scan JSONL trace files for new model output lines (uses byte position, handles partial writes safely)."""
     for jf in sorted(trace_dir.rglob("*.jsonl")):
         fname = str(jf)
         prev_pos = seen.get(fname, 0)
@@ -488,11 +488,18 @@ def _watch_trace_files(trace_dir, run_id: str, seen: dict[str, int]):
             with open(jf) as fh:
                 fh.seek(prev_pos)
                 new_data = fh.read()
-            new_pos = prev_pos + len(new_data)
         except Exception:
             continue
+        # Only advance position to the last COMPLETE line (ending with \n)
+        # to avoid losing data from partial writes
+        last_newline = new_data.rfind("\n")
+        if last_newline < 0:
+            # No complete line yet, retry next poll
+            continue
+        complete_data = new_data[:last_newline + 1]
+        new_pos = prev_pos + len(complete_data)
         new_entries = []
-        for line in new_data.split("\n"):
+        for line in complete_data.split("\n"):
             line = line.strip()
             if not line:
                 continue

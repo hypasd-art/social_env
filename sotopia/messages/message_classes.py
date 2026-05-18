@@ -61,12 +61,13 @@ class Observation(Message):
     action_instruction: str = Field(
         default="", description="instruction for the action"
     )
+    system_digest: str = Field(description="the system digest")
 
     def to_natural_language(self) -> str:
         if self.turn_number == 0:
-            return f"\n{self.last_turn}\n" # Conversation Starts:\n
+            return f"{self.last_turn.strip()}\n" # \nConversation Starts:\n
         else:
-            return f"Turn #{self.turn_number - 1}: {self.last_turn}\n"
+            return f"{self.last_turn.strip()}\n" # \nTurn #{self.turn_number - 1}: 
 
 
 class ScriptBackground(Message):

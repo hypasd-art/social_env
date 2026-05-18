@@ -90,38 +90,11 @@ class FirmDStateVariables:
     memory: NegotiationAgentMemoryVariables | None = None
 
 
-@dataclass
-class InvestorStateVariables:
-    """§10.3 ``investor``。"""
-
-    utility_spec: str | dict[str, Any] | None = None
-    threshold: float | None = None
-    risk_exposure: float | None = None
-    reputation_anchor: float | None = None
-    private_information: dict[str, Any] = field(default_factory=dict)
-    memory: NegotiationAgentMemoryVariables | None = None
-
-
-@dataclass
-class RegulatorStateVariables:
-    """§10.4 ``regulator``（无需货币维度；含政策/使命类结构化占位）。"""
-
-    utility_spec: str | dict[str, Any] | None = None
-    approval_threshold: float | None = None
-    public_mandate: str | dict[str, Any] | None = None
-    policy_constraints: dict[str, Any] = field(default_factory=dict)
-    institutional_credibility_anchor: float | None = None
-    private_information: dict[str, Any] = field(default_factory=dict)
-    memory: NegotiationAgentMemoryVariables | None = None
-
-
 NegotiationPsychState = Union[
     FirmAStateVariables,
     FirmBStateVariables,
     FirmCStateVariables,
     FirmDStateVariables,
-    InvestorStateVariables,
-    RegulatorStateVariables,
 ]
 
 
@@ -134,10 +107,6 @@ def _psych_role_label(st: NegotiationPsychState) -> str:
         return "firm_c"
     if isinstance(st, FirmDStateVariables):
         return "firm_d"
-    if isinstance(st, InvestorStateVariables):
-        return "investor"
-    if isinstance(st, RegulatorStateVariables):
-        return "regulator"
     return type(st).__name__
 
 
@@ -213,40 +182,11 @@ def firm_d_state_from_dict(raw: Mapping[str, Any] | None) -> FirmDStateVariables
     )
 
 
-def investor_state_from_dict(raw: Mapping[str, Any] | None) -> InvestorStateVariables:
-    raw = dict(raw or {})
-    raw.pop("role", None)
-    return InvestorStateVariables(
-        utility_spec=raw.get("utility_spec"),
-        threshold=raw.get("threshold"),
-        risk_exposure=raw.get("risk_exposure"),
-        reputation_anchor=raw.get("reputation_anchor"),
-        private_information=_pinfo(raw),
-        memory=_memory_from_blob(raw.get("memory")),
-    )
-
-
-def regulator_state_from_dict(raw: Mapping[str, Any] | None) -> RegulatorStateVariables:
-    raw = dict(raw or {})
-    raw.pop("role", None)
-    return RegulatorStateVariables(
-        utility_spec=raw.get("utility_spec"),
-        approval_threshold=raw.get("approval_threshold", raw.get("threshold")),
-        public_mandate=raw.get("public_mandate"),
-        policy_constraints=dict(raw.get("policy_constraints") or {}),
-        institutional_credibility_anchor=raw.get("institutional_credibility_anchor"),
-        private_information=_pinfo(raw),
-        memory=_memory_from_blob(raw.get("memory")),
-    )
-
-
 _PSYCH_BUILDERS: dict[str, Any] = {
     "firm_a": firm_a_state_from_dict,
     "firm_b": firm_b_state_from_dict,
     "firm_c": firm_c_state_from_dict,
     "firm_d": firm_d_state_from_dict,
-    "investor": investor_state_from_dict,
-    "regulator": regulator_state_from_dict,
 }
 
 
@@ -292,7 +232,7 @@ def psych_state_to_prompt_addon(
         val = getattr(st, fn, None)
         if val is None:
             continue
-        if fn == "threshold" or fn == "approval_threshold":
+        if fn == "threshold":
             if not expose_threshold:
                 lines.append(f"- {fn}=<hidden> (enable params.expose_psych_threshold_in_observation)")
             else:
@@ -329,18 +269,14 @@ __all__ = [
     "FirmBStateVariables",
     "FirmCStateVariables",
     "FirmDStateVariables",
-    "InvestorStateVariables",
     "NegotiationAgentMemoryVariables",
     "NegotiationPsychState",
     "PsychBundleDict",
-    "RegulatorStateVariables",
     "firm_a_state_from_dict",
     "firm_b_state_from_dict",
     "firm_c_state_from_dict",
     "firm_d_state_from_dict",
-    "investor_state_from_dict",
     "negotiation_psych_state_from_role",
     "psych_bundle_from_agent_dicts",
     "psych_state_to_prompt_addon",
-    "regulator_state_from_dict",
 ]

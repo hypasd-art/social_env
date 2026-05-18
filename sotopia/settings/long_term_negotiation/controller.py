@@ -17,7 +17,7 @@ from .session_roster import (
 )
 from .types import (
     PRINCIPAL_PARTY_ROLES,
-    SESSION_SPEAKER_ROLE_ORDER,
+    SESSION_FIRMS_ONLY_ROLE_ORDER as SESSION_SPEAKER_ROLE_ORDER,
     NegotiationContract,
     NegotiationTimelineParams,
     Phase,
@@ -100,9 +100,6 @@ class NegotiationWorldController:
         self._session_control_actions_per_agent: dict[str, dict[str, int]] = {}
         self._nl_turn_counts: dict[str, dict[str, int]] = {}
 
-        #: §6.4.4 — investor/regulator 退出谈判路径（不必然 world terminal）
-        self.investor_financing_path_withdrawn: bool = False
-        self.regulator_regulatory_path_withdrawn: bool = False
 
         #: §3 scheduling — violations、resolution 追溯、上一轮 digest
         self.scheduling_violation_log: list[dict[str, Any]] = []
@@ -174,8 +171,7 @@ class NegotiationWorldController:
         self._formal_actions_per_agent_day.clear()
         self._last_scheduling_digest = {n: "" for n in self.agent_names}
         self._last_resolve_trace = None
-        self.investor_financing_path_withdrawn = False
-        self.regulator_regulatory_path_withdrawn = False
+        pass
         self._external_event_queue = {n: [] for n in self.agent_names}
         self._progress_flag_this_calendar_day = False
         self._consecutive_idle_calendar_days = 0
@@ -430,10 +426,6 @@ class NegotiationWorldController:
                 chunks.append(f"natural_message_cap_per_agent_per_session={lim_n}")
             if self.terminal:
                 chunks.append(f"world_terminal={self.terminal}")
-            if self.investor_financing_path_withdrawn:
-                chunks.append("investor_financing_path_withdrawn=true")
-            if self.regulator_regulatory_path_withdrawn:
-                chunks.append("regulator_regulatory_path_withdrawn=true")
             self._viewer_slot_bookkeeping_summary[a] = "; ".join(chunks)
 
     def _flush_slot_transcript_to_logs(self) -> None:
@@ -545,9 +537,21 @@ class NegotiationWorldController:
 
         return "\n\n".join(blocks)
 
+    @staticmethod
+    def _append_system_digest(text: str, system_digest: str) -> str:
+        sd = (system_digest or "").strip()
+        if not sd:
+            return text
+        # 只提取 [market_intelligence 新闻块，不附加其余系统状态
+        idx = sd.find("[market_intelligence")
+        if idx >= 0:
+            news = sd[idx:].strip()
+            return text + "\n\n" + news if news else text
+        return text
+
     def observation_for_scheduling_invite(self, viewer: str, system_digest: str) -> Observation:
         prior = (self._last_scheduling_digest.get(viewer) or "").strip()
-        pre = f"[Previous slot — your scheduling outcome]\n{prior}\n\n" if prior else ""
+        pre = f"Previous slot — your scheduling outcome:\n{prior}\n\n" if prior else ""
         ex_req = json.dumps(
             {
                 "negotiation_op": "session_request",
@@ -556,10 +560,11 @@ class NegotiationWorldController:
             },
             ensure_ascii=False,
         )
-        text = (
-            f"{pre}"
-            "Invitation round.\n"
-            "You can use 'session_request' to submit a session request, or pass: {'negotiation_op':'sched_pass'} to skip inviting this slot."
+        text = (""
+            # "--------------------------------------------------------------------------------------------------\n"
+            # f"{pre}"
+            # "Invitation round day {self.day} session {self.slot}.\n"
+            # "You can use 'session_request' to submit a session request, or pass: {'negotiation_op':'sched_pass'} to skip inviting this slot."
         )
         # text = (
         #     f"{pre}"
@@ -575,16 +580,19 @@ class NegotiationWorldController:
         #     f"Everyone in this episode: {self.format_participant_list_nl(self.agent_names)}.\n"
         #     "Use these personal names as strings inside JSON (including yourself if you schedule a session).\n"
         # )
+        last_turn = self._append_system_digest(text, system_digest) + "\n"
         return Observation(
-            last_turn=text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest),
+            last_turn=last_turn,
             turn_number=self._global_turn_number(),
-            available_actions=["action", "none"], # "speak", 
+            available_actions=["action", "none"],
+            system_digest=system_digest,
         )
 
     def observation_for_scheduling_response(self, viewer: str, system_digest: str) -> Observation:
         pend = self.pending_invites_for(viewer)
         header_lines = [
-            "Scheduling — Response round.",
+            # "--------------------------------------------------------------------------------------------------\n"
+            # "Scheduling — Response round day {self.day} session {self.slot}.",
             "Invitations visible to you:",
         ]
         if pend:
@@ -596,7 +604,7 @@ class NegotiationWorldController:
                 )
         else:
             header_lines.append("  (none)")
-        header_lines.append("You can use 'session_response' and 'session_response_batch' to respond to the invitations, or pass: {'negotiation_op':'sched_pass'} to skip responding this slot.")
+        # header_lines.append("You can use 'session_response' and 'session_response_batch' to respond to the invitations, or pass: {'negotiation_op':'sched_pass'} to skip responding this slot.")
         a0 = self.agent_names[0]
         a1 = self.agent_names[1] if len(self.agent_names) > 1 else self.agent_names[0]
         ex_single = json.dumps(
@@ -618,23 +626,26 @@ class NegotiationWorldController:
             ensure_ascii=False,
         )
         # )
+        last_turn = self._append_system_digest("\n".join(header_lines), system_digest)
         return Observation(
-            last_turn="\n".join(header_lines), #  + "\n" + self.base_observation_tail(viewer, system_digest=system_digest)
+            last_turn=last_turn,
             turn_number=self._global_turn_number(),
-            available_actions=["action", "none"], # "speak", 
+            available_actions=["action", "none"],
+            system_digest=system_digest,
         )
 
     def observation_for_session(self, viewer: str, system_digest: str) -> Observation:
         sess = self._current_session()
         if sess is None:
             return Observation(
-                last_turn="No active session.",
+                last_turn="No active session.", # --------------------------------------------------------------------------------------------------\n
                 turn_number=self._global_turn_number(),
                 available_actions=["none"],
             )
         others = [p for p in sess.participants if p != viewer]
         text = (
-            f"Active session {sess.session_id} with {self.format_participant_list_nl(sess.participants)}.\n"
+            # "--------------------------------------------------------------------------------------------------\n"
+            # f"Day {self.day} session {self.slot} Active session {sess.session_id} with {self.format_participant_list_nl(sess.participants)}.\n"
             f"Others in this session: {self.format_participant_list_nl(others)}.\n"
             + "Use natural language with action_type='speak',\n"
             "or structured formal/session_control via action_type='action' with JSON "
@@ -649,19 +660,22 @@ class NegotiationWorldController:
                 if hist[i].startswith(f"{viewer_name}:"):
                     last_own = i
                     break
-            if last_own >= 0:
+            if last_own > 0:
+                # breakpoint()
                 last_turn = "\n".join(hist[last_own:])
             else:
-                last_turn = text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest) + "\n".join(hist)
+                last_turn = text + "\n" + "\n".join(hist) # self.base_observation_tail(viewer, system_digest=system_digest) + 
         else:
             # 首轮：会话说明 + 系统状态
-            last_turn = text + "\n" + self.base_observation_tail(viewer, system_digest=system_digest)
+            last_turn = text + "\n" # + # self.base_observation_tail(viewer, system_digest=system_digest)
         # breakpoint()
         return Observation(
             last_turn=last_turn,
             turn_number=self._global_turn_number(),
             available_actions=["speak", "non-verbal communication", "action", "none", "leave"],
+            system_digest=system_digest,
         )
+        
 
     def _global_turn_number(self) -> int:
         return self._episode_atomic_turn
@@ -1033,7 +1047,35 @@ class NegotiationWorldController:
             self._active_session_idx = 0
             self.session_round = 0
         else:
-            self._enter_post_session()
+            # 没有任何有效 session 时，将所有人拉入一个默认全体会话
+            sid = uuid.uuid4().hex[:12]
+            all_participants = tuple(self.agent_names)
+            self._resolved_sessions = [
+                ResolvedSession(
+                    session_id=sid,
+                    day=self.day,
+                    slot=self.slot,
+                    participants=all_participants,
+                )
+            ]
+            self.session_meta[sid] = SessionRuntimeMeta(
+                session_id=sid,
+                day=self.day,
+                slot=self.slot,
+                participants_start=all_participants,
+                t_start_global_turn=self._episode_atomic_turn,
+            )
+            self._session_busy = set(all_participants)
+            for viewer in self.agent_names:
+                lines: list[str] = [
+                    f"(day={self.day}, slot_k={self.slot}) personalized scheduling digest:",
+                    "- No sessions were scheduled this slot — everyone placed in a default plenary session.",
+                ]
+                self._last_scheduling_digest[viewer] = "\n".join(lines)
+            self.mark_structural_progress()
+            self.phase = Phase.SESSION
+            self._active_session_idx = 0
+            self.session_round = 0
 
     def _enter_post_session(self) -> None:
         self._flush_slot_transcript_to_logs()
@@ -1199,6 +1241,18 @@ class NegotiationWorldController:
         """兼容旧接口；不记入 natural budget（typed channel 请用 ``record_session_turn``）。"""
         self.record_session_turn(agent, "none", content)
 
+    def record_scheduling_action(
+        self, agent: str, action_display: str, *, viewers: tuple[str, ...] | None = None,
+    ) -> None:
+        """将 scheduling 阶段动作推入 ``visible_history``（所有相关方可见）。
+
+        ``viewers`` 为 None 时仅推给 agent 自身。
+        """
+        vlist = tuple(viewers) if viewers is not None else (agent,)
+        line = f"{self.display_name_for(agent)}: [scheduling] {action_display}"
+        for v in vlist:
+            self.visible_history.setdefault(v, []).append(line)
+
     def submit_session_payload(
         self,
         agent: str,
@@ -1221,6 +1275,17 @@ class NegotiationWorldController:
             )
             return
 
+        # SESSION 阶段拒绝 scheduling 类 op（仅 SCHEDULE_INVITE / SCHEDULE_RESPONSE 有效）
+        if op in ("session_request", "session_response", "session_response_batch", "sched_pass"):
+            self._audit_action(
+                agent=agent,
+                negotiation_op=op,
+                verb=None,
+                valid=False,
+                reason="scheduling_op_not_allowed_in_session_phase",
+            )
+            return
+
         if op == "terminate_negotiation":
             if sess is None or agent not in sess.participants:
                 self._audit_action(
@@ -1237,22 +1302,6 @@ class NegotiationWorldController:
                 self._terminate("terminated_by_agent")
                 self._formal_budget_commit_increment(agent)
                 self._audit_action(agent=agent, negotiation_op=op, verb=None, valid=True, reason="world_terminated")
-                return
-            if agent == "investor":
-                self.investor_financing_path_withdrawn = True
-                self._formal_budget_commit_increment(agent)
-                self.append_event_records(
-                    [{"kind": "negotiation_path", "note": "investor_withdrew_financing_path", "day": self.day, "slot": self.slot}]
-                )
-                self._audit_action(agent=agent, negotiation_op=op, verb=None, valid=True, reason="investor_financing_withdrawn")
-                return
-            if agent == "regulator":
-                self.regulator_regulatory_path_withdrawn = True
-                self._formal_budget_commit_increment(agent)
-                self.append_event_records(
-                    [{"kind": "negotiation_path", "note": "regulator_withdrew_regulatory_path", "day": self.day, "slot": self.slot}]
-                )
-                self._audit_action(agent=agent, negotiation_op=op, verb=None, valid=True, reason="regulator_review_withdrawn")
                 return
             self._audit_action(
                 agent=agent,
@@ -1307,26 +1356,8 @@ class NegotiationWorldController:
                 self._formal_reject_contract(agent, payload)
             elif verb == "amend_contract":
                 self._formal_amend(agent, payload, resources_snapshot)
-            elif verb == "request_financing_review":
-                self._formal_request_financing_review(agent, payload)
-            elif verb == "request_regulatory_review":
-                self._formal_request_regulatory_review(agent, payload)
             elif verb == "contract_share":
                 self._formal_contract_share(agent, payload)
-            elif verb == "finance_commit":
-                self.submit_financing_commit(
-                    agent, resources_snapshot, contract_id=payload.get("contract_id")
-                )
-                self._reevaluate_success(resources_snapshot)
-            elif verb == "finance_decline":
-                self.submit_finance_decline(agent, resources_snapshot, payload)
-            elif verb == "regulatory_approve":
-                self.submit_regulator_approve(
-                    agent, resources_snapshot, contract_id=payload.get("contract_id")
-                )
-                self._reevaluate_success(resources_snapshot)
-            elif verb == "regulatory_block":
-                self.submit_regulatory_block(agent, resources_snapshot, payload)
             else:
                 self._audit_action(
                     agent=agent,
@@ -1501,9 +1532,24 @@ class NegotiationWorldController:
 
         terms["_cash_firm_a_snapshot"] = float(res.get("firm_a", {}).get("cash", 0.0))
         vis = set(sess.participants)
-        # § contracts §5.2 — 合同主体 = (PRINCIPAL_PARTY_ROLES ∩ session.participants)。
-        # 双方 lineup 时退化成 {firm_a, firm_b}；3 公司 firms_only 时为 {firm_a, firm_b, firm_c}。
-        parties = set(PRINCIPAL_PARTY_ROLES) & set(sess.participants)
+        # § contracts §5.2 — 合同主体：允许 propose 时通过 ``parties`` 字段指定签约对象（人名列表），
+        # 未指定时回退为 (PRINCIPAL_PARTY_ROLES ∩ session.participants)。
+        specified_parties = payload.get("parties")
+        if specified_parties and isinstance(specified_parties, list) and len(specified_parties) >= 2:
+            resolved = [self.resolve_actor_token(str(x)) for x in specified_parties]
+            bad = [x for x in resolved if x not in sess.participants]
+            if bad:
+                self._audit_action(
+                    agent=agent,
+                    negotiation_op="formal",
+                    verb="propose_contract",
+                    valid=False,
+                    reason=f"parties_not_in_session:{bad}",
+                )
+                return
+            parties = set(resolved)
+        else:
+            parties = set(PRINCIPAL_PARTY_ROLES) & set(sess.participants)
         if not parties:
             parties = set(PRINCIPAL_PARTY_ROLES) & set(self.agent_names)
         acceptances_dict = {p: None for p in sorted(parties)}
@@ -1797,108 +1843,6 @@ class NegotiationWorldController:
         )
         self.mark_structural_progress()
 
-    def _formal_request_financing_review(self, agent: str, payload: dict[str, Any]) -> None:
-        sess = self._current_session()
-        if sess is None or agent not in sess.participants:
-            return
-        cid = str(payload.get("contract_id", self.primary_contract_id or ""))
-        c = self.contracts.get(cid)
-        if not c or not self._contract_agent_sees(agent, c):
-            self._audit_action(
-                agent=agent,
-                negotiation_op="formal",
-                verb="request_financing_review",
-                valid=False,
-                reason="contract_not_visible",
-                extra={"contract_id": cid},
-            )
-            return
-        if not self._contract_live(c):
-            self._audit_action(
-                agent=agent,
-                negotiation_op="formal",
-                verb="request_financing_review",
-                valid=False,
-                reason="contract_not_live",
-                extra={"contract_id": cid},
-            )
-            return
-        if "investor" not in self.agent_names:
-            self._audit_action(
-                agent=agent,
-                negotiation_op="formal",
-                verb="request_financing_review",
-                valid=False,
-                reason="investor_role_absent_from_world",
-            )
-            return
-        if not self._formal_budget_allows_increment(agent, verb="request_financing_review"):
-            return
-        c.visibility.add("investor")
-        c.financing["actor"] = "investor"
-        self._contract_append_history(c, "review.request_financing", agent, detail={"contract_id": cid})
-        self._formal_budget_commit_increment(agent)
-        self._audit_action(
-            agent=agent,
-            negotiation_op="formal",
-            verb="request_financing_review",
-            valid=True,
-            reason="investor_added_visibility",
-            extra={"contract_id": cid},
-        )
-        self.mark_structural_progress()
-
-    def _formal_request_regulatory_review(self, agent: str, payload: dict[str, Any]) -> None:
-        sess = self._current_session()
-        if sess is None or agent not in sess.participants:
-            return
-        cid = str(payload.get("contract_id", self.primary_contract_id or ""))
-        c = self.contracts.get(cid)
-        if not c or not self._contract_agent_sees(agent, c):
-            self._audit_action(
-                agent=agent,
-                negotiation_op="formal",
-                verb="request_regulatory_review",
-                valid=False,
-                reason="contract_not_visible",
-                extra={"contract_id": cid},
-            )
-            return
-        if not self._contract_live(c):
-            self._audit_action(
-                agent=agent,
-                negotiation_op="formal",
-                verb="request_regulatory_review",
-                valid=False,
-                reason="contract_not_live",
-                extra={"contract_id": cid},
-            )
-            return
-        if "regulator" not in self.agent_names:
-            self._audit_action(
-                agent=agent,
-                negotiation_op="formal",
-                verb="request_regulatory_review",
-                valid=False,
-                reason="regulator_role_absent_from_world",
-            )
-            return
-        if not self._formal_budget_allows_increment(agent, verb="request_regulatory_review"):
-            return
-        c.visibility.add("regulator")
-        c.regulatory["actor"] = "regulator"
-        self._contract_append_history(c, "review.request_regulatory", agent, detail={"contract_id": cid})
-        self._formal_budget_commit_increment(agent)
-        self._audit_action(
-            agent=agent,
-            negotiation_op="formal",
-            verb="request_regulatory_review",
-            valid=True,
-            reason="regulator_added_visibility",
-            extra={"contract_id": cid},
-        )
-        self.mark_structural_progress()
-
     def _formal_contract_share(self, agent: str, payload: dict[str, Any]) -> None:
         sess = self._current_session()
         if sess is None or agent not in sess.participants:
@@ -2001,6 +1945,18 @@ class NegotiationWorldController:
                 extra={"contract_id": cid},
             )
             return
+        # §5.2 — 签署必须在合同创建时的同一 session 内完成，跨 session 作废
+        sess = self._current_session()
+        if sess is None or c.created_at.get("session_id") != sess.session_id:
+            self._audit_action(
+                agent=agent,
+                negotiation_op="formal",
+                verb="sign",
+                valid=False,
+                reason="sign_must_be_in_same_session_as_proposal",
+                extra={"contract_id": cid, "created_session": c.created_at.get("session_id")},
+            )
+            return
         if agent not in PRINCIPAL_PARTY_ROLES or agent not in c.parties:
             self._audit_action(
                 agent=agent,
@@ -2034,109 +1990,29 @@ class NegotiationWorldController:
         self._maybe_finalize_success(c, resources_snapshot)
 
     def _finalize_financing_reg_flags(self, c: NegotiationContract) -> None:
-        price = float(c.terms.get("price", 0) or 0)
-        cash_a = float(c.terms.get("_cash_firm_a_snapshot", 0) or 0)
-        need_by_budget = price > cash_a + self.params.financing_buffer
-        tr = c.terms
-        #: §9 — FinancingRequired = 1 iff 现金不足以覆盖名义对价 OR 合同显式含融资附条件
-        explicit_financing = bool(int(tr.get("financing_required", 0) or 0)) or bool(
-            int(tr.get("financing_contingent", 0) or 0)
-        )
-        need_fin = bool(need_by_budget or explicit_financing)
-        c.financing["required"] = 1 if need_fin else 0
-        prev_f = str(c.financing.get("status", "") or "")
-        if not need_fin:
-            c.financing["status"] = "not_required"
-            c.financing["actor"] = None
-        elif prev_f in ("committed", "declined"):
-            c.financing["actor"] = c.financing.get("actor") or (
-                "investor" if "investor" in self.agent_names else "rule_engine"
-            )
-        else:
-            c.financing["status"] = "pending"
-            c.financing["actor"] = "investor" if "investor" in self.agent_names else "rule_engine"
-        r_flag = int(c.terms.get("regulatory_required", 0) or 0)
-        c.regulatory["required"] = r_flag
-        prev_r = str(c.regulatory.get("status", "") or "")
-        if not r_flag:
-            c.regulatory["status"] = "not_required"
-            c.regulatory["actor"] = None
-        elif prev_r in ("approved", "blocked"):
-            c.regulatory["actor"] = c.regulatory.get("actor") or (
-                "regulator" if "regulator" in self.agent_names else "rule_engine"
-            )
-        else:
-            c.regulatory["status"] = "pending"
-            c.regulatory["actor"] = "regulator" if "regulator" in self.agent_names else "rule_engine"
+        c.financing["required"] = 0
+        c.financing["status"] = "not_required"
+        c.financing["actor"] = None
+        c.regulatory["required"] = 0
+        c.regulatory["status"] = "not_required"
+        c.regulatory["actor"] = None
 
     def _auto_rule_engine_reviews(
         self,
         c: NegotiationContract,
         resources_snapshot: Callable[[], dict[str, dict[str, float]]],
     ) -> None:
-        """当无 investor/regulator 角色时，用 deterministic 规则自动完成融资/监管检查。"""
-        if c.status != "accepted":
-            return
-        res = resources_snapshot()
-        if (
-            int(c.financing.get("required", 0)) == 1
-            and c.financing.get("actor") == "rule_engine"
-            and c.financing.get("status") == "pending"
-        ):
-            price = float(c.terms.get("price", 0) or 0)
-            cash_a = float(res.get("firm_a", {}).get("cash", 0.0))
-            gap = max(0.0, price - cash_a - float(self.params.financing_buffer))
-            # rule: 融资缺口过大则拒绝；否则自动承诺
-            if gap > max(200.0, price * 0.35):
-                c.financing["status"] = "declined"
-                self._contract_append_history(
-                    c,
-                    "financing.declined_by_rule_engine",
-                    "__system__",
-                    detail={"contract_id": c.contract_id, "financing_gap": gap},
-                )
-            else:
-                c.financing["status"] = "committed"
-                self._contract_append_history(
-                    c,
-                    "financing.committed_by_rule_engine",
-                    "__system__",
-                    detail={"contract_id": c.contract_id, "financing_gap": gap},
-                )
-        if (
-            int(c.regulatory.get("required", 0)) == 1
-            and c.regulatory.get("actor") == "rule_engine"
-            and c.regulatory.get("status") == "pending"
-        ):
-            hard = int(c.terms.get("policy_hard_violation", 0) or 0)
-            comp = float(c.terms.get("compliance_score", 0.75) or 0.75)
-            if hard == 1 or comp < 0.45:
-                c.regulatory["status"] = "blocked"
-                c.status = "failed"
-                self._contract_append_history(
-                    c,
-                    "regulatory.blocked_by_rule_engine",
-                    "__system__",
-                    detail={"contract_id": c.contract_id, "hard_violation": hard, "compliance_score": comp},
-                )
-            else:
-                c.regulatory["status"] = "approved"
-                self._contract_append_history(
-                    c,
-                    "regulatory.approved_by_rule_engine",
-                    "__system__",
-                    detail={"contract_id": c.contract_id, "compliance_score": comp},
-                )
+        """无机构角色，跳过自动审查。"""
+        _ = c
+        _ = resources_snapshot
 
     def refresh_contract_contingencies_from_resources(
         self, resources: dict[str, dict[str, float]]
     ) -> None:
-        """在 sign 前根据当前现金刷新融资/监管必需标记。"""
+        """在 sign 前根据当前状态刷新监管必需标记。"""
         for c in self.contracts.values():
             if not self._contract_live(c):
                 continue
-            ca = float(resources.get("firm_a", {}).get("cash", 0.0))
-            c.terms["_cash_firm_a_snapshot"] = ca
             self._finalize_financing_reg_flags(c)
 
     def _maybe_finalize_success(
@@ -2156,23 +2032,11 @@ class NegotiationWorldController:
         # 终局成功要求 ``c.parties`` 内每名 principal 都签署。
         if not all(c.signatures.get(p, False) for p in principals):
             return
-        if int(c.financing.get("required", 0)) == 1:
-            if self.investor_financing_path_withdrawn:
-                return
-            if c.financing.get("status") == "declined":
-                return
-            if c.financing.get("status") != "committed":
-                return
-        if int(c.regulatory.get("required", 0)) == 1:
-            if self.regulator_regulatory_path_withdrawn:
-                return
-            if c.regulatory.get("status") != "approved":
-                return
         c.status = "signed"
         self._contract_append_history(c, "contract.closed_signed", "__system__", detail={})
         self.record_execution_event(
             "contract_fully_signed",
-            "合同已完全生效（全部主体签署且融资/监管等附条件满足）；世界继续运行",
+            "合同已完全生效（全部主体签署且监管等附条件满足）；世界继续运行",
             contract_id=c.contract_id,
             status="signed",
         )
@@ -2188,360 +2052,6 @@ class NegotiationWorldController:
             if c.status != "accepted":
                 continue
             self._maybe_finalize_success(c, resources_snapshot)
-
-    def submit_financing_commit(
-        self,
-        investor: str,
-        resources_snapshot: Callable[[], dict[str, dict[str, float]]],
-        *,
-        contract_id: Any | None = None,
-    ) -> None:
-        if investor != "investor":
-            self._audit_action(
-                agent=investor,
-                negotiation_op="formal",
-                verb="finance_commit",
-                valid=False,
-                reason="role_must_be_investor",
-            )
-            return
-
-        if self.investor_financing_path_withdrawn:
-            self._audit_action(
-                agent=investor,
-                negotiation_op="formal",
-                verb="finance_commit",
-                valid=False,
-                reason="investor_withdrew_from_financing_path",
-            )
-            return
-
-        res = resources_snapshot()
-        inv = res.get("investor", {})
-        dc = float(inv.get("deployable_capital", inv.get("cash", 0.0)))
-        want = str(contract_id).strip() if contract_id not in (None, "") else None
-
-        for c in self.contracts.values():
-            if want is not None and c.contract_id != want:
-                continue
-            if not self._contract_live(c):
-                continue
-            if investor not in c.visibility:
-                continue
-            if int(c.financing.get("required", 0)) != 1:
-                continue
-            if c.financing.get("status") == "declined":
-                continue
-            if c.financing.get("status") == "committed":
-                continue
-            price = float(c.terms.get("price", 0) or 0)
-            cash_a = float(res.get("firm_a", {}).get("cash", 0.0))
-            need = max(0.0, price - cash_a - float(self.params.financing_buffer))
-
-            if self.params.enforce_formal_budget_checks and need > dc + 1e-9:
-                self._audit_action(
-                    agent=investor,
-                    negotiation_op="formal",
-                    verb="finance_commit",
-                    valid=False,
-                    reason="insufficient_deployable_capital_for_financing_gap",
-                    extra={"required_gap": need, "deployable_capital": dc},
-                )
-                return
-            if not self._formal_budget_allows_increment(investor, verb="finance_commit"):
-                return
-            c.financing["status"] = "committed"
-            self._contract_append_history(
-                c, "financing.committed", investor, detail={"contract_id": c.contract_id}
-            )
-            self._formal_budget_commit_increment(investor)
-            self._audit_action(
-                agent=investor,
-                negotiation_op="formal",
-                verb="finance_commit",
-                valid=True,
-                reason="committed",
-                extra={"contract_id": c.contract_id},
-            )
-            self.record_execution_event(
-                "financing_committed",
-                f"投资方确认融资承诺（contract_id={c.contract_id}）",
-                contract_id=c.contract_id,
-                agent=investor,
-            )
-            self.mark_structural_progress()
-            return
-
-        self._audit_action(
-            agent=investor,
-            negotiation_op="formal",
-            verb="finance_commit",
-            valid=False,
-            reason="no_contract_pending_financing_for_visible_target",
-            extra={"filter_contract_id": want},
-        )
-
-    def submit_finance_decline(
-        self,
-        investor: str,
-        resources_snapshot: Callable[[], dict[str, dict[str, float]]],
-        payload: dict[str, Any],
-    ) -> None:
-        """§6.4.3 ``commit.finance_decline``；committed 之后不可 decline。"""
-        _ = resources_snapshot
-        if investor != "investor":
-            self._audit_action(
-                agent=investor,
-                negotiation_op="formal",
-                verb="finance_decline",
-                valid=False,
-                reason="role_must_be_investor",
-            )
-            return
-        if self.investor_financing_path_withdrawn:
-            self._audit_action(
-                agent=investor,
-                negotiation_op="formal",
-                verb="finance_decline",
-                valid=False,
-                reason="investor_withdrew_from_financing_path",
-            )
-            return
-        want = str(payload.get("contract_id")).strip() if payload.get("contract_id") not in (None, "") else None
-        rsn = str(payload.get("reason", ""))[:500]
-
-        for c in self.contracts.values():
-            if want is not None and c.contract_id != want:
-                continue
-            if not self._contract_live(c):
-                continue
-            if investor not in c.visibility:
-                continue
-            if int(c.financing.get("required", 0)) != 1:
-                continue
-            st = str(c.financing.get("status", ""))
-            if st == "committed":
-                self._audit_action(
-                    agent=investor,
-                    negotiation_op="formal",
-                    verb="finance_decline",
-                    valid=False,
-                    reason="cannot_decline_after_finance_commit",
-                    extra={"contract_id": c.contract_id},
-                )
-                return
-            if st == "declined":
-                self._audit_action(
-                    agent=investor,
-                    negotiation_op="formal",
-                    verb="finance_decline",
-                    valid=True,
-                    reason="already_declined",
-                    extra={"contract_id": c.contract_id},
-                )
-                return
-            if not self._formal_budget_allows_increment(investor, verb="finance_decline"):
-                return
-            c.financing["status"] = "declined"
-            self._contract_append_history(
-                c,
-                "financing.declined",
-                investor,
-                detail={"contract_id": c.contract_id, "reason": rsn},
-            )
-            self._formal_budget_commit_increment(investor)
-            self._audit_action(
-                agent=investor,
-                negotiation_op="formal",
-                verb="finance_decline",
-                valid=True,
-                reason="declined",
-                extra={"contract_id": c.contract_id},
-            )
-            self.mark_structural_progress()
-            return
-
-        self._audit_action(
-            agent=investor,
-            negotiation_op="formal",
-            verb="finance_decline",
-            valid=False,
-            reason="no_contract_pending_finance_for_visible_decline_target",
-            extra={"filter_contract_id": want},
-        )
-
-    def submit_regulator_approve(
-        self,
-        regulator: str,
-        resources_snapshot: Callable[[], dict[str, dict[str, float]]],
-        *,
-        contract_id: Any | None = None,
-    ) -> None:
-        _ = resources_snapshot
-        if regulator != "regulator":
-            self._audit_action(
-                agent=regulator,
-                negotiation_op="formal",
-                verb="regulatory_approve",
-                valid=False,
-                reason="role_must_be_regulator",
-            )
-            return
-
-        if self.regulator_regulatory_path_withdrawn:
-            self._audit_action(
-                agent=regulator,
-                negotiation_op="formal",
-                verb="regulatory_approve",
-                valid=False,
-                reason="regulator_withdrew_from_regulatory_path",
-            )
-            return
-
-        want = str(contract_id).strip() if contract_id not in (None, "") else None
-
-        for c in self.contracts.values():
-            if want is not None and c.contract_id != want:
-                continue
-            if not self._contract_live(c):
-                continue
-            if regulator not in c.visibility:
-                continue
-            if int(c.regulatory.get("required", 0)) != 1:
-                continue
-            if c.regulatory.get("status") in ("approved", "blocked"):
-                continue
-            if int(c.terms.get("policy_hard_violation", 0) or 0) == 1:
-                c.status = "failed"
-                c.regulatory["status"] = "blocked"
-                self._contract_append_history(
-                    c,
-                    "regulatory.blocked",
-                    regulator,
-                    detail={"contract_id": c.contract_id, "reason": "policy_hard_violation"},
-                )
-                self._audit_action(
-                    agent=regulator,
-                    negotiation_op="formal",
-                    verb="regulatory_approve",
-                    valid=False,
-                    reason="policy_hard_violation_blocks_approval",
-                    extra={"contract_id": c.contract_id},
-                )
-                self.mark_structural_progress()
-                return
-            if not self._formal_budget_allows_increment(regulator, verb="regulatory_approve"):
-                return
-            c.regulatory["status"] = "approved"
-            self._contract_append_history(
-                c, "regulatory.approved", regulator, detail={"contract_id": c.contract_id}
-            )
-            self._formal_budget_commit_increment(regulator)
-            self._audit_action(
-                agent=regulator,
-                negotiation_op="formal",
-                verb="regulatory_approve",
-                valid=True,
-                reason="approved",
-                extra={"contract_id": c.contract_id},
-            )
-            self.record_execution_event(
-                "regulatory_approved",
-                f"监管方批准（contract_id={c.contract_id}）",
-                contract_id=c.contract_id,
-                agent=regulator,
-            )
-            self.mark_structural_progress()
-            return
-
-        self._audit_action(
-            agent=regulator,
-            negotiation_op="formal",
-            verb="regulatory_approve",
-            valid=False,
-            reason="no_contract_pending_regulator_for_visible_target",
-            extra={"filter_contract_id": want},
-        )
-
-    def submit_regulatory_block(
-        self,
-        regulator: str,
-        resources_snapshot: Callable[[], dict[str, dict[str, float]]],
-        payload: dict[str, Any],
-    ) -> None:
-        """§6.4.3 ``commit.block`` — 显式监管否决（与 hard violation 路径区分）。"""
-        _ = resources_snapshot
-        if regulator != "regulator":
-            self._audit_action(
-                agent=regulator,
-                negotiation_op="formal",
-                verb="regulatory_block",
-                valid=False,
-                reason="role_must_be_regulator",
-            )
-            return
-        if self.regulator_regulatory_path_withdrawn:
-            self._audit_action(
-                agent=regulator,
-                negotiation_op="formal",
-                verb="regulatory_block",
-                valid=False,
-                reason="regulator_withdrew_from_regulatory_path",
-            )
-            return
-        raw_cid = payload.get("contract_id")
-        want = str(raw_cid).strip() if raw_cid not in (None, "") else None
-        reason = str(payload.get("reason", ""))[:500]
-
-        for c in self.contracts.values():
-            if want is not None and c.contract_id != want:
-                continue
-            if not self._contract_live(c):
-                continue
-            if regulator not in c.visibility:
-                continue
-            if int(c.regulatory.get("required", 0)) != 1:
-                continue
-            if c.regulatory.get("status") == "approved":
-                self._audit_action(
-                    agent=regulator,
-                    negotiation_op="formal",
-                    verb="regulatory_block",
-                    valid=False,
-                    reason="cannot_block_after_approval",
-                    extra={"contract_id": c.contract_id},
-                )
-                return
-            if not self._formal_budget_allows_increment(regulator, verb="regulatory_block"):
-                return
-            c.status = "failed"
-            c.regulatory["status"] = "blocked"
-            self._contract_append_history(
-                c,
-                "regulatory.blocked",
-                regulator,
-                detail={"contract_id": c.contract_id, "reason": reason or "explicit_block"},
-            )
-            self._formal_budget_commit_increment(regulator)
-            self._audit_action(
-                agent=regulator,
-                negotiation_op="formal",
-                verb="regulatory_block",
-                valid=True,
-                reason="blocked",
-                extra={"contract_id": c.contract_id},
-            )
-            self.mark_structural_progress()
-            return
-
-        self._audit_action(
-            agent=regulator,
-            negotiation_op="formal",
-            verb="regulatory_block",
-            valid=False,
-            reason="no_contract_pending_regulatory_block",
-            extra={"filter_contract_id": want},
-        )
 
     def _terminate(self, reason: str) -> None:
         """§9 — world-level 终止（幂等），并记入 ``event_log``。"""
